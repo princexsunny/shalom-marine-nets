@@ -1,0 +1,18 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+
+# NEVER bake credentials into the image — pass them as env vars instead
+serviceAccountKey.json
+.env
+.env.*
+
+# Local data + uploads are scratch only; the cloud holds the real copies
+data/app.json
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Docs aren't needed at runtime
+*.md
+render.yaml

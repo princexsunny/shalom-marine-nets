@@ -1,0 +1,22 @@
+# Render Blueprint — free Node web service for Shalom Marine Nets.
+# Render → New → Blueprint → pick this repo. Add the FIREBASE_* env vars in the dashboard
+# (paste your service-account JSON as FIREBASE_SERVICE_ACCOUNT) so data + uploads persist.
+services:
+  - type: web
+    name: shalom-marine-nets
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production         # disables the local-only OTP dev code
+      - key: SESSION_SECRET
+        generateValue: true       # stable secret so admins/customers stay logged in
+      # --- add these in the Render dashboard (kept out of source control) ---
+      # - key: FIREBASE_SERVICE_ACCOUNT   # paste the whole service-account JSON string
+      # - key: FIREBASE_STORAGE_BUCKET    # your-project.appspot.com
+      # - key: FIREBASE_RESTORE           # set to 1 on first boot to seed from cloud backup

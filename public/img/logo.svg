@@ -1,0 +1,18 @@
+<svg width="360" height="90" viewBox="0 0 360 90" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Shalom Marine Nets">
+  <defs>
+    <linearGradient id="smn" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a2540"/>
+      <stop offset="1" stop-color="#0071c5"/>
+    </linearGradient>
+  </defs>
+  <!-- emblem -->
+  <rect x="8" y="15" width="60" height="60" rx="15" fill="url(#smn)"/>
+  <g stroke="#ffffff" stroke-width="2" fill="none" opacity=".92" stroke-linecap="round">
+    <path d="M20 45 L29 36 L38 45 L47 36 L56 45 M16 45 L25 54 L34 45 L43 54 L52 45"/>
+    <path d="M29 36 L29 54 M38 45 L38 63 M47 36 L47 54"/>
+    <path d="M18 53 Q26 59 38 57 T58 57" opacity=".7"/>
+  </g>
+  <!-- wordmark -->
+  <text x="86" y="48" font-family="-apple-system, 'SF Pro Display', 'Segoe UI', Inter, Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="-.5" fill="#0a2540">Shalom<tspan fill="#0071c5" font-weight="600"> Marine Nets</tspan></text>
+  <text x="87" y="68" font-family="-apple-system, 'SF Pro Display', 'Segoe UI', Inter, Arial, sans-serif" font-size="11.5" font-weight="500" letter-spacing="3" fill="#6e6e73">PURSE SEINE • NETS • MARINE GEAR</text>
+</svg>
