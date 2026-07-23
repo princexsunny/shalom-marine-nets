@@ -17,13 +17,26 @@ const firebase = require('./firebase');
 // otherwise the local /uploads path (existing behaviour).
 async function filesToUrls(reqFiles) {
   const files = reqFiles || [];
-  if (!firebase.storageEnabled()) return files.map(f => ({ url: `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' }));
+  if (!firebase.storageEnabled()) {
+    console.log('[upload] Firebase Storage disabled — using local /uploads');
+    return files.map(f => ({ url: `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' }));
+  }
+  console.log('[upload] Firebase Storage enabled — uploading', files.length, 'file(s)');
   const out = [];
   for (const f of files) {
     try {
       const url = await firebase.uploadToStorage(f.path, f.filename, f.mimetype);
-      out.push({ url: url || `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' });
-    } catch (e) { out.push({ url: `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' }); }
+      if (!url) {
+        console.error('[upload] Firebase returned null URL for', f.filename, '— check bucket config');
+        out.push({ url: `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' });
+      } else {
+        console.log('[upload] SUCCESS:', f.filename, '→', url.substring(0, 60) + '...');
+        out.push({ url, type: /^video\//.test(f.mimetype) ? 'video' : 'image' });
+      }
+    } catch (e) {
+      console.error('[upload] ERROR uploading', f.filename, ':', e.message);
+      out.push({ url: `/uploads/${f.filename}`, type: /^video\//.test(f.mimetype) ? 'video' : 'image' });
+    }
   }
   return out;
 }
