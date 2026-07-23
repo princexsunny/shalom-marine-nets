@@ -837,7 +837,7 @@
     });
   }
 
-  // Auto-cycling image slideshow on product cards (pause on hover)
+  // Auto-cycling image slideshow on product cards (pause on hover + touch swipe)
   function initCardSlideshows(wrap) {
     const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     wrap.querySelectorAll('.pcard__media .slides').forEach(sl => {
@@ -857,6 +857,15 @@
       card.addEventListener('mouseleave', start);
       dots.forEach((d, i) => d.addEventListener('click', (e) => { e.stopPropagation(); stop(); go(i); }));
       sl.parentElement.querySelectorAll('.cnav').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); stop(); go(idx + Number(btn.dataset.dir)); }));
+      // Touch swipe support (left/right swipe to navigate)
+      let touchStartX = null;
+      sl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+      sl.addEventListener('touchend', e => {
+        if (touchStartX == null) return;
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        if (Math.abs(dx) > 30) { stop(); go(idx + (dx < 0 ? 1 : -1)); }
+        touchStartX = null;
+      }, { passive: true });
       start();
     });
   }
