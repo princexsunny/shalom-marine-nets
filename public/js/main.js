@@ -35,12 +35,168 @@
   function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
   function save() { localStorage.setItem('mn_cart', JSON.stringify(CART)); localStorage.setItem('mn_saved', JSON.stringify(SAVED)); }
 
+  // -------- mobile detection & features --------
+  const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
+  const isSmallPhone = () => window.matchMedia('(max-width: 480px)').matches;
+
+  function initStickyBottomCTA() {
+    if (!isMobile()) return;
+    const existing = $('#stickyBottomCTA');
+    if (existing) existing.remove();
+    const cta = document.createElement('div');
+    cta.id = 'stickyBottomCTA';
+    cta.className = 'sticky-cta';
+    const phone = SITE.settings?.contact_phone || '+91XXXXXXXXXX';
+    const wa = SITE.settings?.contact_whatsapp || 'XXXXXXXXXX';
+    cta.innerHTML = `
+      <button class="cta-btn cta-call" title="Call us">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      </button>
+      <button class="cta-btn cta-wa" title="Chat on WhatsApp">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.67-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.076 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421-7.403h-.004a9.87 9.87 0 00-4.782 1.14l-.046.025-4.774.798.81-4.884a9.9 9.9 0 011.516-4.578A9.897 9.897 0 0112.05 0C6.584 0 2.247 4.339 2.247 9.675c0 1.697.429 3.365 1.237 4.857L2.129 23l5.355-1.403a9.873 9.873 0 004.735 1.206h.005c5.467 0 9.805-4.338 9.805-9.675 0-2.591-.981-5.032-2.767-6.864a9.900 9.900 0 00-7.075-2.836"/></svg>
+      </button>
+      <button class="cta-btn cta-cart" title="Open cart">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        <span id="stickyCartCount" class="cart-badge">0</span>
+      </button>
+    `;
+    document.body.appendChild(cta);
+    cta.querySelector('.cta-call').addEventListener('click', () => window.location.href = `tel:${phone}`);
+    cta.querySelector('.cta-wa').addEventListener('click', () => {
+      const num = wa.replace(/\D/g, '');
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent('Hi, I am interested in your products.')}`, '_blank');
+    });
+    cta.querySelector('.cta-cart').addEventListener('click', openCart);
+    updateStickyCartCount();
+  }
+
+  function updateStickyCartCount() {
+    const el = $('#stickyCartCount');
+    if (el) {
+      const n = CART.reduce((s, i) => s + i.quantity, 0);
+      el.textContent = n;
+      el.style.display = n > 0 ? 'flex' : 'none';
+    }
+  }
+
+  function lazyLoadImages() {
+    if ('IntersectionObserver' in window) {
+      const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            const img = e.target;
+            if (img.dataset.src) { img.src = img.dataset.src; delete img.dataset.src; }
+            obs.unobserve(img);
+          }
+        });
+      }, { rootMargin: '100px' });
+      document.querySelectorAll('img[data-src]').forEach(img => obs.observe(img));
+    }
+  }
+
+  // -------- pinch-to-zoom on images --------
+  function initPinchZoom() {
+    if (!isMobile()) return;
+    document.addEventListener('touchstart', (e) => {
+      const img = e.target.closest('img.product-image');
+      if (!img) return;
+      if (e.touches.length === 2) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        const img = e.target.closest('img.product-image');
+        if (!img) return;
+        e.preventDefault();
+        const touch1 = e.touches[0], touch2 = e.touches[1];
+        const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        if (!img._touchStart) img._touchStart = dist;
+        const scale = dist / img._touchStart;
+        img.style.transform = `scale(${Math.min(Math.max(scale, 1), 3)})`;
+        img.style.cursor = 'grab';
+      }
+    }, { passive: false });
+    document.addEventListener('touchend', (e) => {
+      const img = e.target.closest('img.product-image');
+      if (img) { img._touchStart = null; img.style.transform = 'scale(1)'; }
+    });
+  }
+
+  // -------- expandable product specs --------
+  function initExpandableSpecs() {
+    if (!isMobile()) return;
+    document.addEventListener('click', (e) => {
+      const spec = e.target.closest('.spec-tab');
+      if (!spec) return;
+      const isOpen = spec.classList.contains('open');
+      spec.closest('.specs-group')?.querySelectorAll('.spec-tab').forEach(s => s.classList.remove('open'));
+      if (!isOpen) spec.classList.add('open');
+    });
+  }
+
+  // -------- quick-view modal --------
+  function openQuickView(productId) {
+    const p = SITE.products.find(x => x.id === productId);
+    if (!p) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'quick-view-overlay';
+    overlay.innerHTML = `
+      <div class="quick-view-modal">
+        <button class="qv-close">×</button>
+        <div class="qv-image">
+          <img src="${esc((p.images || [])[0] || '')}" alt="${esc(p.name)}">
+        </div>
+        <div class="qv-info">
+          <h3>${esc(p.name)}</h3>
+          <p class="qv-cat">${esc(p.category_name || '')}</p>
+          <p class="qv-desc">${esc((p.description || '').substring(0, 100))}</p>
+          <div class="qv-price">${gmoney(p.effective_price)}</div>
+          <div class="qv-actions">
+            <button class="btn btn--sm qv-view">View Details</button>
+            <button class="btn btn--sm btn--dark qv-cart">Add to Cart</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.qv-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('.qv-view').addEventListener('click', () => { overlay.remove(); location.hash = '#product-' + p.id; });
+    overlay.querySelector('.qv-cart').addEventListener('click', () => {
+      addToCart({
+        product_id: p.id, name: p.name, category: p.category_name, sku: p.sku, image: (p.images||[])[0] || '',
+        variant_id: '', variant_label: '', quantity: 1, unit: p.default_unit,
+        unit_price: p.effective_price, size: '', mesh_size: '', md_size: '', material: '', color: '',
+        custom_specs: '', special_instructions: '',
+      });
+      overlay.remove();
+    });
+  }
+
+  // -------- mobile checkout simplification --------
+  function simplifyCheckoutForMobile() {
+    if (!isMobile()) return;
+    const form = $('#checkoutForm');
+    if (form) {
+      form.classList.add('mobile-checkout');
+      form.querySelectorAll('fieldset').forEach((fs, i) => {
+        if (i > 0) fs.style.marginTop = '1.5rem';
+      });
+    }
+  }
+
   // ---------------- boot ----------------
   async function boot() {
     try { SITE = await (await fetch('/api/public/site')).json(); }
     catch { SITE = { products: [], settings: {}, shipping: [], payments: [] }; }
     renderSettings(); renderProducts(); updateCartUI(); initReveal(); checkCustomer(); loadNetParts(); initHeroUI();
     initProductControls(); initExtras(); injectProductSchema();
+    setTimeout(() => {
+      initStickyBottomCTA();
+      initPinchZoom();
+      initExpandableSpecs();
+      simplifyCheckoutForMobile();
+      lazyLoadImages();
+    }, 100);
   }
 
   // ---------------- filter + sort ----------------
@@ -532,7 +688,117 @@
     document.addEventListener('keydown', authEsc);
     return pop;
   }
+  // ---- Firebase Phone Auth (client) — used when the project is configured ----
+  const fbAuthOn = () => !!(SITE.firebase_auth && SITE.firebase_config && SITE.firebase_config.apiKey);
+  let _fbAuth = null, _fbLoading = null;
+  function loadFirebaseAuth() {
+    if (_fbAuth) return Promise.resolve(_fbAuth);
+    if (_fbLoading) return _fbLoading;
+    const addScript = (src) => new Promise((res, rej) => {
+      const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+    const base = 'https://www.gstatic.com/firebasejs/10.12.2/';
+    _fbLoading = addScript(base + 'firebase-app-compat.js')
+      .then(() => addScript(base + 'firebase-auth-compat.js'))
+      .then(() => {
+        if (!window.firebase.apps.length) window.firebase.initializeApp(SITE.firebase_config);
+        _fbAuth = window.firebase.auth();
+        try { _fbAuth.useDeviceLanguage(); } catch {}
+        return _fbAuth;
+      });
+    return _fbLoading;
+  }
+  function ensureRecaptcha(auth) {
+    if (window._fbRecaptcha) return window._fbRecaptcha;
+    let holder = document.getElementById('fbRecaptcha');
+    if (!holder) { holder = document.createElement('div'); holder.id = 'fbRecaptcha'; document.body.appendChild(holder); }
+    // compat keeps the v8 signature: (container, params)
+    window._fbRecaptcha = new window.firebase.auth.RecaptchaVerifier('fbRecaptcha', { size: 'invisible' }, auth);
+    return window._fbRecaptcha;
+  }
+
+  function openSignInFirebase(onDone) {
+    const pop = authShell(`
+      <h3 class="auth-title">Sign in / Sign up</h3>
+      <p class="auth-sub">Enter your mobile number — we'll text you a verification code.</p>
+      <label class="auth-label">Name <span style="color:var(--grey);font-weight:400">(optional)</span></label>
+      <input id="siName" class="auth-input" placeholder="Your name" autocomplete="name">
+      <label class="auth-label" style="margin-top:10px">Mobile number</label>
+      <div class="phone-row">
+        <span class="phone-cc">🇮🇳 +91</span>
+        <input id="siPhone" inputmode="numeric" maxlength="10" placeholder="98765 43210" autocomplete="tel">
+      </div>
+      <p class="form__msg err" id="siMsg"></p>
+      <button class="btn btn--block auth-btn" id="siSend">Continue</button>
+    `);
+    const phoneEl = $('#siPhone', pop);
+    phoneEl.addEventListener('input', () => { phoneEl.value = phoneEl.value.replace(/\D/g, '').slice(0, 10); });
+    setTimeout(() => phoneEl.focus(), 60);
+    const submit = async () => {
+      const digits = phoneEl.value.replace(/\D/g, ''); const msg = $('#siMsg', pop); msg.textContent = '';
+      if (!/^[6-9]\d{9}$/.test(digits)) { msg.textContent = 'Enter a valid 10-digit Indian mobile number.'; return; }
+      const phone = '+91' + digits; const name = $('#siName', pop).value.trim();
+      const btn = $('#siSend', pop); btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const auth = await loadFirebaseAuth();
+        const verifier = ensureRecaptcha(auth);
+        const confirmation = await auth.signInWithPhoneNumber(phone, verifier);
+        fbOtpStep(phone, confirmation, onDone, name);
+      } catch (e) {
+        // reset recaptcha so a retry works
+        try { if (window._fbRecaptcha) { window._fbRecaptcha.clear(); window._fbRecaptcha = null; } } catch {}
+        msg.textContent = fbErr(e); btn.disabled = false; btn.textContent = 'Continue';
+      }
+    };
+    $('#siSend', pop).addEventListener('click', submit);
+    phoneEl.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+  }
+  function fbOtpStep(phone, confirmation, onDone, name) {
+    const pop = authShell(`
+      <h3 class="auth-title">Verify</h3>
+      <p class="auth-sub">Enter the 6-digit code sent to <strong>${esc(phone)}</strong>.</p>
+      <div class="otp-boxes" id="otpBoxes">${Array.from({ length: 6 }).map(() => `<input class="otp-box" inputmode="numeric" maxlength="1">`).join('')}</div>
+      <p class="form__msg err" id="otpMsg"></p>
+      <button class="btn btn--block auth-btn" id="otpVerify">Verify &amp; Sign In</button>
+      <div class="auth-actions">
+        <button class="link-btn" id="otpChange">Change number</button>
+      </div>
+    `);
+    const boxes = [...pop.querySelectorAll('.otp-box')];
+    setTimeout(() => boxes[0] && boxes[0].focus(), 60);
+    boxes.forEach((b, i) => {
+      b.addEventListener('input', () => { b.value = b.value.replace(/\D/g, '').slice(0, 1); if (b.value && boxes[i + 1]) boxes[i + 1].focus(); });
+      b.addEventListener('keydown', e => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) boxes[i - 1].focus(); if (e.key === 'Enter') verify(); });
+      b.addEventListener('paste', e => { const t = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6); if (t) { e.preventDefault(); t.split('').forEach((c, j) => { if (boxes[j]) boxes[j].value = c; }); (boxes[Math.min(t.length, 5)]).focus(); } });
+    });
+    $('#otpChange', pop).addEventListener('click', () => openSignInFirebase(onDone));
+    async function verify() {
+      const msg = $('#otpMsg', pop); msg.textContent = '';
+      const code = boxes.map(b => b.value).join('');
+      if (code.length !== 6) { msg.textContent = 'Enter the 6-digit code.'; return; }
+      const btn = $('#otpVerify', pop); btn.disabled = true; btn.textContent = 'Verifying…';
+      try {
+        const cred = await confirmation.confirm(code);
+        const idToken = await cred.user.getIdToken();
+        const r = await (await fetch('/api/customer/firebase-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken, name }) })).json();
+        if (r.error) throw new Error(r.error);
+        CUSTOMER = r.customer; updateAuthUI(); closeAuth(); toast('Signed in'); if (onDone) onDone();
+      } catch (e) { msg.textContent = fbErr(e); btn.disabled = false; btn.textContent = 'Verify & Sign In'; }
+    }
+    $('#otpVerify', pop).addEventListener('click', verify);
+  }
+  function fbErr(e) {
+    const c = (e && e.code) || '';
+    if (c === 'auth/invalid-verification-code') return 'Incorrect code — please try again.';
+    if (c === 'auth/code-expired') return 'Code expired — request a new one.';
+    if (c === 'auth/too-many-requests') return 'Too many attempts. Please wait a while and try again.';
+    if (c === 'auth/invalid-phone-number') return 'That phone number looks invalid.';
+    return (e && e.message) || 'Something went wrong. Please try again.';
+  }
+
   function openSignIn(onDone) {
+    if (fbAuthOn()) return openSignInFirebase(onDone);
     const pop = authShell(`
       <h3 class="auth-title">Sign in / Sign up</h3>
       <p class="auth-sub">Enter your mobile number — we'll create your account automatically if you're new.</p>
@@ -753,12 +1019,12 @@
       const imgs = p.images || [];
       let img;
       if (imgs.length > 1) {
-        img = `<div class="slides">${imgs.map((u, i) => `<img class="slide${i === 0 ? ' active' : ''}" src="${esc(u)}" alt="${esc(p.name)}" loading="lazy">`).join('')}</div>
+        img = `<div class="slides">${imgs.map((u, i) => `<img class="slide product-image${i === 0 ? ' active' : ''}" src="${esc(u)}" alt="${esc(p.name)}" loading="lazy">`).join('')}</div>
           <button class="cnav cprev" data-dir="-1" aria-label="Previous image">&#8249;</button>
           <button class="cnav cnext" data-dir="1" aria-label="Next image">&#8250;</button>
           <div class="dots">${imgs.map((_, i) => `<span class="dot${i === 0 ? ' active' : ''}" data-i="${i}"></span>`).join('')}</div>`;
       } else if (imgs.length === 1) {
-        img = `<img src="${esc(imgs[0])}" alt="${esc(p.name)}" loading="lazy">`;
+        img = `<img class="product-image" src="${esc(imgs[0])}" alt="${esc(p.name)}" loading="lazy">`;
       } else {
         img = `<div class="pcard__ph">${netIcon}<span>Product image</span></div>`;
       }
@@ -790,7 +1056,7 @@
             return h;
           })()}
           <div class="pcard__actions">
-            <button class="btn btn--sm buy-btn" data-buy="${p.id}" ${out?'disabled':''}>${out?'<span data-i18n="Out of Stock">Out of Stock</span>':`<svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l1.5 12.4a1.5 1.5 0 0 0 1.5 1.3h9.3a1.5 1.5 0 0 0 1.5-1.2L20.5 7H6"/></svg><span data-i18n="Buy Now">Buy Now</span>`}</button>
+            <button class="btn btn--sm buy-btn qv-trigger" data-buy="${p.id}" data-qv="${p.id}" ${out?'disabled':''}>${out?'<span data-i18n="Out of Stock">Out of Stock</span>':`<svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l1.5 12.4a1.5 1.5 0 0 0 1.5 1.3h9.3a1.5 1.5 0 0 0 1.5-1.2L20.5 7H6"/></svg><span data-i18n="Buy Now">Buy Now</span>`}</button>
             <button class="btn btn--ghost btn--sm view-btn" data-view="${p.id}"><svg class="btn-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><span data-i18n="Details">Details</span></button>
           </div>
         </div>
@@ -813,6 +1079,7 @@
     }));
     wrap.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => openDetails(Number(b.dataset.view))));
     wrap.querySelectorAll('.pcard__media[data-view]').forEach(m => m.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetails(Number(m.dataset.view)); } }));
+    wrap.querySelectorAll('.qv-trigger').forEach(b => b.addEventListener('click', (e) => { if (isMobile()) { e.stopPropagation(); openQuickView(Number(b.dataset.qv)); } }));
     attachTilt(wrap);
     initCardSlideshows(wrap);
     initCardZoom(wrap);
@@ -858,14 +1125,35 @@
       dots.forEach((d, i) => d.addEventListener('click', (e) => { e.stopPropagation(); stop(); go(i); }));
       sl.parentElement.querySelectorAll('.cnav').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); stop(); go(idx + Number(btn.dataset.dir)); }));
       // Touch swipe support (left/right swipe to navigate)
-      let touchStartX = null;
-      sl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+      const media = sl.closest('.pcard__media');
+      let touchStartX = null, touchStartY = null, swiped = false;
+      sl.addEventListener('touchstart', e => {
+        if (e.touches.length !== 1) { touchStartX = null; return; }
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        swiped = false;
+      }, { passive: true });
+      sl.addEventListener('touchmove', e => {
+        if (touchStartX == null || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - touchStartX;
+        const dy = e.touches[0].clientY - touchStartY;
+        // horizontal intent — mark as a swipe so the tap-to-view click is suppressed
+        if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) swiped = true;
+      }, { passive: true });
       sl.addEventListener('touchend', e => {
         if (touchStartX == null) return;
         const dx = e.changedTouches[0].clientX - touchStartX;
-        if (Math.abs(dx) > 30) { stop(); go(idx + (dx < 0 ? 1 : -1)); }
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+          stop(); go(idx + (dx < 0 ? 1 : -1));
+          swiped = true;
+        }
         touchStartX = null;
       }, { passive: true });
+      // stop a swipe from also firing the card's "view details" click
+      if (media) media.addEventListener('click', e => {
+        if (swiped) { e.stopPropagation(); e.preventDefault(); swiped = false; }
+      }, true);
       start();
     });
   }
@@ -1154,7 +1442,7 @@
   }
 
   // ---------------- cart ----------------
-  function addToCart(item) { CART.push({ ...item, _id: Date.now() + Math.random() }); save(); updateCartUI(); toast('Added to cart'); }
+  function addToCart(item) { CART.push({ ...item, _id: Date.now() + Math.random() }); save(); updateCartUI(); updateStickyCartCount(); toast('Added to cart'); }
   function removeFromCart(_id) { CART = CART.filter(i => i._id !== _id); save(); updateCartUI(); openCart(); }
   function setQty(_id, q) { const it = CART.find(i => i._id === _id); if (it) { it.quantity = Math.max(1, q); save(); updateCartUI(); openCart(); } }
   function saveForLater(_id) { const it = CART.find(i => i._id === _id); if (it) { CART = CART.filter(i => i._id !== _id); SAVED.push(it); save(); updateCartUI(); openCart(); } }
@@ -1164,6 +1452,7 @@
   function updateCartUI() {
     const n = CART.reduce((s, i) => s + i.quantity, 0);
     const c = $('#cartCount'); c.textContent = n; c.hidden = n === 0;
+    updateStickyCartCount();
   }
 
   function lineImg(i) { return i.image ? `<img class="cart-line__img" src="${esc(i.image)}">` : `<div class="cart-line__img">No image</div>`; }
@@ -1390,16 +1679,73 @@
   }
 
   function orderSuccess(r) {
+    const canPay = SITE.razorpay && r.total > 0;
     modal(`
       <div class="modal__head"><h3>Order Received</h3><button class="modal__close">&times;</button></div>
       <div class="modal__body"><div class="success-box">
         <div class="check">✓</div>
         <h3 style="color:var(--navy)">Thank you — your order is in.</h3>
         <p style="color:var(--grey);margin:.6rem 0">Order <strong>${esc(r.order_number)}</strong></p>
-        <p style="color:var(--grey);max-width:42ch;margin:0 auto">Our team will review pricing, stock and shipping, then send you a payment request. Estimated total: <strong>${money(r.total)}</strong>.</p>
+        <p style="color:var(--grey);max-width:42ch;margin:0 auto">${canPay
+          ? `You can pay securely online now, or we'll send a payment request after review. Total: <strong>${money(r.total)}</strong>.`
+          : `Our team will review pricing, stock and shipping, then send you a payment request. Estimated total: <strong>${money(r.total)}</strong>.`}</p>
+        <p class="form__msg err" id="payMsg" style="margin-top:.6rem"></p>
       </div></div>
-      <div class="modal__foot" style="justify-content:flex-end"><button class="btn modal__close-btn">Done</button></div>`, (box) => {
+      <div class="modal__foot" style="justify-content:${canPay ? 'space-between' : 'flex-end'}">
+        <button class="btn btn--ghost modal__close-btn">${canPay ? 'Pay later' : 'Done'}</button>
+        ${canPay ? `<button class="btn" id="payNowBtn">Pay Now Online</button>` : ''}
+      </div>`, (box) => {
       box.querySelector('.modal__close-btn').addEventListener('click', closeModal);
+      const pb = $('#payNowBtn', box);
+      if (pb) pb.addEventListener('click', () => payNow(r.order_number, pb, $('#payMsg', box)));
+    });
+  }
+
+  function loadRazorpayCheckout() {
+    return new Promise((res, rej) => {
+      if (window.Razorpay) return res();
+      const s = document.createElement('script');
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      s.onload = res; s.onerror = () => rej(new Error('Could not load the payment window. Check your connection.'));
+      document.head.appendChild(s);
+    });
+  }
+  async function payNow(orderNumber, btn, msgEl) {
+    if (msgEl) msgEl.textContent = '';
+    btn.disabled = true; btn.textContent = 'Starting…';
+    try {
+      await loadRazorpayCheckout();
+      const r = await (await fetch('/api/public/pay/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_number: orderNumber }) })).json();
+      if (r.error) throw new Error(r.error);
+      const rzp = new window.Razorpay({
+        key: r.key, amount: r.amount, currency: r.currency, name: r.name,
+        description: 'Order ' + r.order_number, order_id: r.razorpay_order_id,
+        prefill: r.prefill, theme: { color: '#0071c5' },
+        handler: async (resp) => {
+          try {
+            const v = await (await fetch('/api/public/pay/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ order_number: r.order_number, razorpay_order_id: resp.razorpay_order_id, razorpay_payment_id: resp.razorpay_payment_id, razorpay_signature: resp.razorpay_signature }) })).json();
+            if (v.ok) paymentDone(r.order_number);
+            else if (msgEl) { msgEl.textContent = v.error || 'Payment could not be verified. If money was deducted, contact us.'; btn.disabled = false; btn.textContent = 'Pay Now Online'; }
+          } catch { if (msgEl) msgEl.textContent = 'Could not confirm payment. If money was deducted, contact us.'; btn.disabled = false; btn.textContent = 'Pay Now Online'; }
+        },
+        modal: { ondismiss: () => { btn.disabled = false; btn.textContent = 'Pay Now Online'; } },
+      });
+      rzp.on('payment.failed', (r2) => { if (msgEl) msgEl.textContent = (r2 && r2.error && r2.error.description) || 'Payment failed. Please try again.'; btn.disabled = false; btn.textContent = 'Pay Now Online'; });
+      rzp.open();
+    } catch (e) { if (msgEl) msgEl.textContent = e.message; btn.disabled = false; btn.textContent = 'Pay Now Online'; }
+  }
+  function paymentDone(orderNumber) {
+    modal(`
+      <div class="modal__head"><h3>Payment Successful</h3><button class="modal__close">&times;</button></div>
+      <div class="modal__body"><div class="success-box">
+        <div class="check">✓</div>
+        <h3 style="color:var(--navy)">Payment received — thank you!</h3>
+        <p style="color:var(--grey);margin:.6rem 0">Order <strong>${esc(orderNumber)}</strong> is now paid.</p>
+        <p style="color:var(--grey);max-width:42ch;margin:0 auto">We've emailed your confirmation. Our team will arrange dispatch and keep you posted.</p>
+      </div></div>
+      <div class="modal__foot" style="justify-content:flex-end"><button class="btn modal__close-btn2">Done</button></div>`, (box) => {
+      box.querySelector('.modal__close-btn2').addEventListener('click', closeModal);
     });
   }
 

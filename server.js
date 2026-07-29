@@ -12,6 +12,22 @@ const { store, bcrypt } = require('./db');
 const { sendSms, smsEnabled } = require('./sms');
 const { sendEmail } = require('./email');
 const firebase = require('./firebase');
+const razorpay = require('./razorpay');
+
+// Public (non-secret) Firebase web config for client-side Phone Auth. These are
+// safe to expose — they identify the project, they are not credentials.
+function firebaseWebConfig() {
+  const apiKey = process.env.FIREBASE_WEB_API_KEY;
+  const authDomain = process.env.FIREBASE_WEB_AUTH_DOMAIN;
+  const projectId = process.env.FIREBASE_WEB_PROJECT_ID;
+  if (!apiKey || !authDomain || !projectId) return null;
+  return {
+    apiKey, authDomain, projectId,
+    appId: process.env.FIREBASE_WEB_APP_ID || undefined,
+    messagingSenderId: process.env.FIREBASE_WEB_SENDER_ID || undefined,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || undefined,
+  };
+}
 
 // Turn multer's saved files into public URLs — via Firebase Storage when configured,
 // otherwise the local /uploads path (existing behaviour).
@@ -301,6 +317,9 @@ app.get('/api/public/site', (req, res) => {
     shipping: store.activeShipping(),
     payments: store.enabledPayments(),
     firebase_auth: firebase.firebaseEnabled(),   // client may offer Firebase sign-in when true
+    firebase_config: firebaseWebConfig(),        // non-secret web config for client Phone Auth (null if unset)
+    razorpay: razorpay.rzpEnabled(),             // client may offer online payment when true
+    razorpay_key: razorpay.rzpKeyId(),           // publishable Key ID (safe for the browser)
   });
 });
 app.get('/api/public/product/:id', (req, res) => {
@@ -425,6 +444,49 @@ app.post('/api/public/order', rateLimit(10, 10 * 60 * 1000), (req, res) => {
   if (settings.contact_email) sendEmail(settings.contact_email, `New order ${order.order_number}`,
     `New order from ${order.customer.full_name} (${order.customer.company || order.customer.email}) — ${money}.`).catch(()=>{});
   res.json({ ok: true, order_number: order.order_number, id: order.id, total: order.total, currency: order.currency });
+});
+
+// =====================================================================
+//  ONLINE PAYMENT — Razorpay (optional; enabled only when keys are set)
+// =====================================================================
+// Step 1: create a Razorpay order for an already-placed store order. The browser
+// then opens Razorpay checkout with the returned razorpay order id.
+app.post('/api/public/pay/create', rateLimit(20, 10 * 60 * 1000), async (req, res) => {
+  if (!razorpay.rzpEnabled()) return res.status(503).json({ error: 'Online payment is not available right now.' });
+  const orderNumber = (req.body || {}).order_number;
+  const o = store.getOrderByNumber(orderNumber);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  if (o.payment_status === 'paid') return res.status(409).json({ error: 'This order is already paid.' });
+  // amount is taken from the server-side order total — never from the client
+  const rzp = await razorpay.createOrder(o.total, o.currency || 'INR', o.order_number);
+  if (!rzp) return res.status(502).json({ error: 'Could not start payment. Please try again.' });
+  store.attachRazorpayOrder(o.order_number, rzp.id);
+  res.json({
+    ok: true, key: razorpay.rzpKeyId(), razorpay_order_id: rzp.id,
+    amount: rzp.amount, currency: rzp.currency,
+    order_number: o.order_number,
+    name: (store.getSettings().company_name || 'Marine Nets'),
+    prefill: { name: o.customer.full_name || '', email: o.customer.email || '', contact: o.customer.phone || '' },
+  });
+});
+
+// Step 2: verify the signature Razorpay hands the browser, then mark the order paid.
+app.post('/api/public/pay/verify', rateLimit(20, 10 * 60 * 1000), (req, res) => {
+  if (!razorpay.rzpEnabled()) return res.status(503).json({ error: 'Online payment is not available right now.' });
+  const { order_number, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+  const o = store.getOrderByNumber(order_number);
+  if (!o) return res.status(404).json({ error: 'Order not found' });
+  // the razorpay order id must match the one we created for this store order
+  if (o.razorpay_order_id && o.razorpay_order_id !== razorpay_order_id)
+    return res.status(400).json({ error: 'Payment does not match this order.' });
+  const ok = razorpay.verifySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+  if (!ok) return res.status(400).json({ error: 'Payment could not be verified.' });
+  store.markOrderPaid(o.order_number, { payment_id: razorpay_payment_id, razorpay_order_id });
+  // notify office + customer
+  const settings = store.getSettings();
+  if (settings.contact_email) sendEmail(settings.contact_email, `Payment received — ${o.order_number}`,
+    `Order ${o.order_number} has been paid online (Razorpay ${razorpay_payment_id}). Total ${o.currency} ${o.total}.`).catch(()=>{});
+  res.json({ ok: true, order_number: o.order_number });
 });
 
 // =====================================================================
@@ -781,6 +843,7 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
     console.log(`\n  Marine Nets B2B running at  http://localhost:${PORT}`);
     console.log(`  Storefront  ->  http://localhost:${PORT}/`);
     console.log(`  Admin panel ->  http://localhost:${PORT}/admin   (admin / admin123)`);
-    console.log(`  Firebase    ->  ${firebase.firebaseEnabled() ? (firebase.storageEnabled() ? 'Firestore + Storage + Auth' : 'Firestore + Auth') : 'disabled (local mode)'}\n`);
+    console.log(`  Firebase    ->  ${firebase.firebaseEnabled() ? (firebase.storageEnabled() ? 'Firestore + Storage + Auth' : 'Firestore + Auth') : 'disabled (local mode)'}`);
+    console.log(`  Razorpay    ->  ${razorpay.rzpEnabled() ? 'enabled (online payment on)' : 'disabled (review-then-pay flow)'}\n`);
   });
 })();

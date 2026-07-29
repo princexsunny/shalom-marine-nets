@@ -860,6 +860,27 @@ const store = {
     store.notify('payment_request', `Payment request sent for order ${o.order_number}`);
     persist(); return o;
   },
+  getOrderByNumber(number) {
+    return state.orders.find(o => o.order_number.toLowerCase() === String(number || '').trim().toLowerCase()) || null;
+  },
+  // Record the Razorpay order id we created so verify() can trust the amount later
+  attachRazorpayOrder(orderNumber, rzpOrderId) {
+    const o = store.getOrderByNumber(orderNumber); if (!o) return null;
+    o.razorpay_order_id = rzpOrderId; o.updated_at = new Date().toISOString();
+    persist(); return o;
+  },
+  // Mark an order paid after the signature has been verified server-side
+  markOrderPaid(orderNumber, { payment_id, razorpay_order_id } = {}) {
+    const o = store.getOrderByNumber(orderNumber); if (!o) return null;
+    o.payment_status = 'paid';
+    o.payment_method = o.payment_method || 'razorpay';
+    o.razorpay_payment_id = payment_id || '';
+    if (razorpay_order_id) o.razorpay_order_id = razorpay_order_id;
+    o.updated_at = new Date().toISOString();
+    o.history.push({ ts: o.updated_at, status: o.status, note: `Payment received (Razorpay ${payment_id || ''})` });
+    store.notify('payment_received', `Payment received for order ${o.order_number} — ${fmt(o.total, o.currency)}`);
+    persist(); return o;
+  },
 
   // order tracking (public — no account)
   trackOrder(number, contact) {

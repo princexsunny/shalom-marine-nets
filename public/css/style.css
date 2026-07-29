@@ -854,3 +854,189 @@ select{color-scheme:light;accent-color:var(--ocean)}
   .card-select:hover,.card-select:focus,.products-toolbar select:hover,.np2__typebar select:hover,.field select:hover{transform:none}
   .card-select.just-picked,.np2__typebar select.just-picked,.field select.just-picked{animation:none}
 }
+
+/* ============================================================
+   MOBILE FEATURES: Sticky CTA, Quick View, Lazy Load, Specs
+   ============================================================ */
+
+/* Sticky bottom CTA bar (mobile only) */
+@media(max-width:768px){
+  .sticky-cta{
+    position:fixed;bottom:0;left:0;right:0;height:60px;z-index:250;
+    display:flex;gap:6px;padding:8px;background:#fff;border-top:1px solid var(--line);
+    box-shadow:0 -2px 12px rgba(10,37,64,.12);animation:ctaSlideUp .35s var(--ease)
+  }
+  @keyframes ctaSlideUp{from{transform:translateY(100%)}to{transform:none}}
+  .cta-btn{
+    flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;
+    background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;color:var(--navy);
+    font-weight:500;font-size:.75rem;cursor:pointer;padding:0;transition:background .2s,color .2s;
+    position:relative
+  }
+  .cta-btn:active{background:#E5EAF1}
+  .cta-btn svg{width:20px;height:20px;color:var(--ocean)}
+  .cta-btn.cta-cart{color:var(--ocean)}
+  .cart-badge{
+    position:absolute;top:-4px;right:-6px;background:var(--ocean);color:#fff;
+    border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+    font-size:.65rem;font-weight:700
+  }
+  /* padding for content when sticky CTA is visible */
+  body:has(.sticky-cta) .cart{margin-bottom:60px}
+  body:has(.sticky-cta) #checkoutForm{margin-bottom:60px}
+}
+
+/* Quick-view modal */
+.quick-view-overlay{
+  position:fixed;inset:0;background:rgba(10,37,64,.45);backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);z-index:350;animation:qvOverlay .25s ease-out;display:flex;
+  align-items:center;justify-content:center;padding:16px
+}
+@keyframes qvOverlay{from{opacity:0}to{opacity:1}}
+.quick-view-modal{
+  background:#fff;border-radius:20px;width:100%;max-width:500px;max-height:80vh;
+  overflow-y:auto;animation:qvPop .35s var(--ease);position:relative;
+  box-shadow:0 25px 60px -12px rgba(10,37,64,.3)
+}
+@keyframes qvPop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.qv-close{
+  position:sticky;top:0;left:0;right:0;background:none;border:none;font-size:2rem;
+  color:var(--navy);width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;z-index:1;align-self:flex-end;margin:-8px -8px 0 auto;padding:0
+}
+.qv-image{background:var(--page);border-radius:16px;margin:12px;overflow:hidden}
+.qv-image img{width:100%;height:auto;display:block}
+.qv-info{padding:0 20px 20px}
+.qv-info h3{font-size:1.25rem;margin-bottom:.3rem;color:var(--navy)}
+.qv-cat{font-size:.85rem;color:var(--grey);margin-bottom:.5rem}
+.qv-desc{font-size:.95rem;color:var(--ink);margin-bottom:1rem;line-height:1.4}
+.qv-price{font-size:1.5rem;font-weight:600;color:var(--navy);margin-bottom:1rem}
+.qv-actions{display:flex;gap:10px}
+.qv-actions .btn{flex:1}
+
+/* Lazy-loading image placeholder */
+img[data-src]{background:var(--bg-soft);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:.6}50%{opacity:.3}}
+@media(prefers-reduced-motion:reduce){img[data-src]{animation:none}}
+
+/* Pinch-to-zoom product images */
+.product-image{
+  touch-action:manipulation;transition:transform .15s ease-out;
+  will-change:transform;cursor:grab
+}
+.product-image:active{cursor:grabbing}
+@media(prefers-reduced-motion:reduce){.product-image{will-change:auto}}
+
+/* Expandable product spec tabs (mobile) */
+@media(max-width:768px){
+  .specs-group{display:flex;flex-direction:column;gap:8px}
+  .spec-tab{
+    background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;cursor:pointer;transition:all .2s var(--ease);display:flex;
+    justify-content:space-between;align-items:center;color:var(--navy);font-weight:500;
+    font-size:.95rem;user-select:none
+  }
+  .spec-tab:hover{background:#E5EAF1;border-color:var(--ocean)}
+  .spec-tab.open{background:rgba(0,113,197,.06);border-color:var(--ocean)}
+  .spec-tab::after{
+    content:'›';font-size:1.5rem;color:var(--ocean);transition:transform .25s var(--ease);
+    display:inline-flex;align-items:center;justify-content:center
+  }
+  .spec-tab.open::after{transform:rotate(90deg)}
+  .spec-content{
+    display:none;padding:12px 0;color:var(--grey);font-size:.9rem;font-weight:400;
+    line-height:1.5
+  }
+  .spec-tab.open + .spec-content{display:block;animation:slideDown .25s var(--ease)}
+  @keyframes slideDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+}
+
+/* Mobile checkout simplification */
+@media(max-width:768px){
+  #checkoutForm{max-width:100%}
+  #checkoutForm fieldset{margin-bottom:1.5rem}
+  #checkoutForm label{font-size:.95rem;margin-bottom:.4rem}
+  #checkoutForm input,#checkoutForm textarea,#checkoutForm select{
+    font-size:16px;padding:.8rem;min-height:44px;border-radius:10px
+  }
+  /* iOS zoom-out fix: use 16px minimum for inputs */
+}
+
+/* Performance: disable animations on slower devices */
+@media(prefers-reduced-motion:reduce){
+  .sticky-cta,body:has(.sticky-cta) .cart,body:has(.sticky-cta) #checkoutForm,
+  .quick-view-overlay,.quick-view-modal,.product-image,.spec-tab{
+    transition:none!important;animation:none!important
+  }
+}
+
+/* ============================================================
+   TOUCHSCREEN OPTIMIZATION
+   Targets real touch devices (no hover, coarse pointer) rather
+   than a width breakpoint — tablets and phones both qualify.
+   ============================================================ */
+
+/* Global touch niceties (all devices, harmless on desktop) */
+*{-webkit-tap-highlight-color:rgba(0,113,197,.12)}
+button,a,label,select,summary,[role=button]{touch-action:manipulation}
+.modal__body,.cart,.pm__body,.card-specs,.products-toolbar,.np2__typebar{-webkit-overflow-scrolling:touch}
+
+@media (hover:none) and (pointer:coarse){
+  /* --- Carousel controls: no hover exists, so keep them visible & tappable --- */
+  .pcard__media .cnav{opacity:1;width:40px;height:40px;font-size:20px;background:rgba(255,255,255,.94)}
+  .pcard__media .cprev{left:6px}
+  .pcard__media .cnext{right:6px}
+  .pcard__media .dots{gap:12px;bottom:10px}
+  .pcard__media .dot{position:relative;width:8px;height:8px}
+  .pcard__media .dot.active{width:20px}
+  /* invisible 44px hit area around each tiny dot */
+  .pcard__media .dot::after{content:'';position:absolute;inset:-16px}
+
+  /* --- Minimum 44px tap targets everywhere --- */
+  .btn{min-height:46px;padding-top:.7rem;padding-bottom:.7rem}
+  .btn--sm{min-height:42px}
+  .icon-btn{padding:.55rem;min-width:44px;min-height:44px;justify-content:center}
+  .link-btn{padding:10px 6px;font-size:.9rem;text-decoration:none;display:inline-flex;align-items:center;min-height:40px}
+  .qty{align-items:center}
+  .qty button{width:44px;height:44px;font-size:1.35rem}
+  .qty input{height:44px;width:52px;font-size:1rem}
+  .pm__close,.modal__close,.auth-close{width:44px;height:44px;font-size:24px}
+  .cs-pill,.cc-dot,.bswatch{min-height:40px;min-width:40px}
+  .cc-dot{width:34px;height:34px}
+  .dots .dot,.np-thumb{cursor:default}
+  .np-chip{min-height:40px;padding:.5rem .9rem}
+  .np-thumb{min-width:52px;min-height:52px}
+
+  /* --- Selects sized for fingers --- */
+  select,.card-select{min-height:44px;font-size:16px}
+  input,textarea{font-size:16px}   /* stops iOS auto-zoom on focus */
+
+  /* --- Visible tap feedback (replaces the missing :hover cue) --- */
+  .pcard__media:active{opacity:.92}
+  .pcard:active .pcard__inner{transform:scale(.995)}
+  .btn:active{transform:scale(.96)}
+  .cs-pill:active,.cc-dot:active,.bswatch:active{transform:scale(.94)}
+  .link-btn:active{color:var(--ocean)}
+  .cta-btn:active{background:#dbe6f2}
+
+  /* --- Neutralise sticky hover states that "stick" after a tap --- */
+  .btn:hover{background:var(--ocean)}
+  .btn--ghost:hover{background:transparent}
+  .pcard__media .cnav:hover{background:rgba(255,255,255,.94)}
+  .icon-btn:hover{color:var(--navy)}
+  /* disable the desktop hover-zoom magnifier transform on touch */
+  .pcard__media .slides,.pcard__media img{transform:none!important;transform-origin:center!important}
+
+  /* --- Roomier list rows for cart / orders --- */
+  .cart-line{padding-top:12px;padding-bottom:12px}
+  .co-login button{min-height:40px}
+}
+
+/* Safe-area padding so the sticky bar clears the phone's home indicator */
+@supports(padding:max(0px)){
+  @media(max-width:768px){
+    .sticky-cta{height:auto;padding-bottom:max(8px,env(safe-area-inset-bottom));padding-left:max(8px,env(safe-area-inset-left));padding-right:max(8px,env(safe-area-inset-right))}
+    .sticky-cta .cta-btn{min-height:52px}
+    body:has(.sticky-cta) .cart,body:has(.sticky-cta) #checkoutForm{margin-bottom:calc(60px + env(safe-area-inset-bottom))}
+  }
+}
