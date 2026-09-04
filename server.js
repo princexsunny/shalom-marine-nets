@@ -592,6 +592,15 @@ app.post('/api/public/enquiry', rateLimit(10, 10 * 60 * 1000), async (req, res) 
 });
 
 // ---- admin oversight ----
+/* One call for the whole Partners screen. Each separate request costs a
+   Firestore round trip (~600ms from Render), so fetching stats, vendors and
+   products together keeps the admin snappy. */
+app.get('/api/mkt/overview', requireAuth, async (req, res) => {
+  const [stats, vendors, products] = await Promise.all([
+    marketplace.stats(), marketplace.allVendors(), marketplace.allProducts(),
+  ]);
+  res.json({ stats, vendors, products });
+});
 app.get('/api/mkt/stats', requireAuth, async (req, res) => res.json(await marketplace.stats()));
 app.get('/api/mkt/vendors', requireAuth, async (req, res) => res.json(await marketplace.allVendors(req.query.status)));
 app.get('/api/mkt/vendors/:id', requireAuth, async (req, res) => {

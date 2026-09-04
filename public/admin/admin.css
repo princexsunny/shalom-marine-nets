@@ -331,3 +331,10 @@ select.just-picked{animation:selPop .28s ease}
   .field select:hover,.filters select:hover,.inv-toolbar select:hover,table select:hover{transform:none}
   select.just-picked{animation:none}
 }
+
+/* marketplace screens: loading state so a slow Firestore read never looks frozen */
+.mkt-loading{display:flex;align-items:center;gap:.6rem;padding:2rem 1rem;color:var(--grey);font-size:.95rem}
+.mkt-spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--ocean);
+  border-radius:50%;animation:mktspin .7s linear infinite;flex:none}
+@keyframes mktspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.mkt-spin{animation:none}}

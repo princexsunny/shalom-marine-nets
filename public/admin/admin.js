@@ -1264,11 +1264,17 @@
     return `<span class="st ${cls}">${esc(label)}</span>`;
   };
 
+  // shown while a marketplace screen waits on Firestore
+  const loading = (msg = 'Loading…') =>
+    `<div class="mkt-loading"><span class="mkt-spin"></span>${esc(msg)}</div>`;
+
   async function viewPartners() {
-    main.innerHTML = head('Partner Companies', 'Outside companies selling through your marketplace.');
-    const [stats, list] = await Promise.all([api('/api/mkt/stats'), api('/api/mkt/vendors')]);
+    main.innerHTML = head('Partner Companies', 'Outside companies selling through your marketplace.') + loading();
+    // one request instead of three — each round trip to Firestore costs ~600ms
+    const { stats, vendors: list, products } = await api('/api/mkt/overview');
     const pending = list.filter(v => v.status === 'pending');
 
+    main.innerHTML = head('Partner Companies', 'Outside companies selling through your marketplace.');
     main.innerHTML += `
       <div class="cards" style="margin-bottom:1rem">
         <div class="card"><span>Total partners</span><b>${stats.vendors_total}</b></div>
@@ -1313,27 +1319,32 @@
       : '<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:1.4rem">No partner companies yet. Share the link <strong>/vendor</strong> to invite them.</td></tr>'}
       </tbody></table></div>`;
 
-    // fill listing counts
-    api('/api/mkt/products').then(prods => {
-      $$('.pcount').forEach(el => {
-        const n = prods.filter(p => p.vendor_id === el.dataset.count);
-        el.textContent = `${n.filter(p => p.status === 'approved').length} live / ${n.length}`;
-      });
-    }).catch(() => {});
+    // listing counts — products already came back with the overview call
+    $$('.pcount').forEach(el => {
+      const n = products.filter(p => p.vendor_id === el.dataset.count);
+      el.textContent = `${n.filter(p => p.status === 'approved').length} live / ${n.length}`;
+    });
 
-    const setStatus = async (id, status, okMsg) => {
+    // disable the button and show progress so a slow round trip never looks dead
+    const busy = (btn, label) => { if (btn) { btn._t = btn.textContent; btn.disabled = true; btn.textContent = label; } };
+    const unbusy = (btn) => { if (btn) { btn.disabled = false; btn.textContent = btn._t || btn.textContent; } };
+    const setStatus = async (id, status, okMsg, btn) => {
+      busy(btn, 'Working…');
       try { await api(`/api/mkt/vendors/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-        toast(okMsg); viewPartners(); } catch (e) { toast(e.message); }
+        toast(okMsg); viewPartners(); } catch (e) { toast(e.message); unbusy(btn); }
     };
-    $$('[data-ap]').forEach(b => b.addEventListener('click', () => setStatus(b.dataset.ap, 'approved', 'Partner approved')));
+    $$('[data-ap]').forEach(b => b.addEventListener('click', () => setStatus(b.dataset.ap, 'approved', 'Partner approved', b)));
     $$('[data-rj]').forEach(b => b.addEventListener('click', () => {
-      if (confirm('Reject this application?')) setStatus(b.dataset.rj, 'rejected', 'Application rejected');
+      if (confirm('Reject this application?')) setStatus(b.dataset.rj, 'rejected', 'Application rejected', b);
     }));
     $$('[data-sp]').forEach(b => b.addEventListener('click', () => {
       if (confirm('Suspend this partner? Their listings will be hidden immediately.'))
-        setStatus(b.dataset.sp, 'suspended', 'Partner suspended');
+        setStatus(b.dataset.sp, 'suspended', 'Partner suspended', b);
     }));
-    $$('[data-vw]').forEach(b => b.addEventListener('click', () => partnerDetail(b.dataset.vw)));
+    $$('[data-vw]').forEach(b => b.addEventListener('click', () => {
+      busy(b, 'Opening…');
+      partnerDetail(b.dataset.vw).finally(() => unbusy(b));
+    }));
   }
 
   async function partnerDetail(id) {
@@ -1412,8 +1423,10 @@
 
   // ===================== MARKETPLACE: LISTINGS REVIEW =====================
   async function viewPartnerProducts() {
-    main.innerHTML = head('Partner Listings', 'Review products submitted by partner companies.');
+    const hd = head('Partner Listings', 'Review products submitted by partner companies.');
+    main.innerHTML = hd + loading();
     const list = await api('/api/mkt/products');
+    main.innerHTML = hd;
     const pending = list.filter(p => p.status === 'pending');
     const render = (rows, title, emptyMsg) => `
       <h3 style="margin:1.2rem 0 .6rem;color:var(--navy)">${title} (${rows.length})</h3>
@@ -1450,8 +1463,10 @@
 
   // ===================== MARKETPLACE: ENQUIRIES =====================
   async function viewEnquiries() {
-    main.innerHTML = head('Marketplace Enquiries', 'Buyer enquiries sent to partner companies.');
+    const hd = head('Marketplace Enquiries', 'Buyer enquiries sent to partner companies.');
+    main.innerHTML = hd + loading();
     const list = await api('/api/mkt/enquiries');
+    main.innerHTML = hd;
     main.innerHTML += `<div class="tablewrap"><table><thead><tr>
       <th>Buyer</th><th>Product</th><th>Partner</th><th>Qty</th><th>When</th><th>Status</th>
     </tr></thead><tbody>

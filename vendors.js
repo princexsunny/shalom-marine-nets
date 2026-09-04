@@ -94,6 +94,22 @@ async function readAll(col) {
   const rows = useCloud() ? await firebase.colAll(col) : [...(local[col] || [])];
   return cacheSet(ck, rows);
 }
+/* Keep the cached list correct WITHOUT throwing it away.
+   Nuking the cache on every write meant each admin action (approve, reject…)
+   forced a fresh round trip to Firestore — roughly 600ms each — which made the
+   admin screens feel frozen. Instead we patch the cached array in place and
+   only drop the derived views, which genuinely must be recomputed. */
+function cachePatch(col, row, removed) {
+  const entry = cache.get('all:' + col);
+  if (entry) {
+    const arr = entry.data.filter(x => x.id !== row.id);
+    if (!removed) arr.push(row);
+    entry.data = arr;
+    entry.at = Date.now();                 // the list is authoritative again
+  }
+  for (const k of [...cache.keys()]) if (k.startsWith('public:')) cache.delete(k);
+}
+
 async function writeOne(col, row) {
   if (useCloud()) await firebase.colSet(col, row.id, row);
   else {
@@ -102,17 +118,13 @@ async function writeOne(col, row) {
     if (i >= 0) arr[i] = row; else arr.push(row);
     saveLocal();
   }
-  /* Clear everything, not just this collection: derived views such as
-     "public:products" are built from BOTH products and vendors, so a
-     collection-scoped clear would leave them stale. Writes are rare
-     compared with reads, so this costs little. */
-  cacheClear();
+  cachePatch(col, row, false);
   return row;
 }
 async function deleteOne(col, id) {
   if (useCloud()) await firebase.colDelete(col, id);
   else { local[col] = (local[col] || []).filter(x => x.id !== id); saveLocal(); }
-  cacheClear();
+  cachePatch(col, { id }, true);
   return true;
 }
 async function readOne(col, id) {
@@ -199,9 +211,9 @@ const marketplace = {
     v.status = status;
     v.updated_at = nowIso();
     if (status === 'approved' && !v.approved_at) { v.approved_at = v.updated_at; v.approved_by = actor || ''; }
+    // writeOne() drops the derived "public:*" views, so suspending a vendor
+    // hides their listings on the very next storefront read.
     await writeOne(COL_VENDORS, v);
-    // suspending a vendor must immediately hide their listings
-    if (status !== 'approved') cacheClear('all:' + COL_PRODUCTS);
     return { ok: true, vendor: v };
   },
   async updateVendor(id, d = {}, { adminFields = false } = {}) {
