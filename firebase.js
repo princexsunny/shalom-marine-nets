@@ -95,4 +95,57 @@ async function verifyIdToken(idToken) {
   catch { return null; }
 }
 
-module.exports = { firebaseEnabled, storageEnabled, uploadToStorage, saveState, loadState, verifyIdToken };
+/* ---------------------------------------------------------------------------
+   Generic per-document collection helpers.
+   The whole-app "state" mirror above lives in ONE Firestore document and is
+   capped at 1 MB — fine for a single company, but it cannot hold a marketplace.
+   These helpers store one document per record instead, so vendors / partner
+   products / enquiries scale to thousands of rows with no ceiling.
+   --------------------------------------------------------------------------- */
+
+/** Write (create or overwrite) a document. */
+async function colSet(col, id, data) {
+  if (!enabled) return null;
+  try { await _db.collection(col).doc(String(id)).set(data, { merge: false }); return data; }
+  catch (e) { console.error(`[firebase] colSet ${col}/${id} failed:`, e.message); return null; }
+}
+/** Shallow-merge fields into an existing document. */
+async function colUpdate(col, id, patch) {
+  if (!enabled) return null;
+  try { await _db.collection(col).doc(String(id)).set(patch, { merge: true }); return patch; }
+  catch (e) { console.error(`[firebase] colUpdate ${col}/${id} failed:`, e.message); return null; }
+}
+async function colGet(col, id) {
+  if (!enabled) return null;
+  try { const d = await _db.collection(col).doc(String(id)).get(); return d.exists ? d.data() : null; }
+  catch (e) { console.error(`[firebase] colGet ${col}/${id} failed:`, e.message); return null; }
+}
+async function colDelete(col, id) {
+  if (!enabled) return false;
+  try { await _db.collection(col).doc(String(id)).delete(); return true; }
+  catch (e) { console.error(`[firebase] colDelete ${col}/${id} failed:`, e.message); return false; }
+}
+/**
+ * Read a collection, optionally filtered.
+ * @param {string} col
+ * @param {Array} where  e.g. [['status','==','approved']]
+ * @param {object} opts  { limit }
+ */
+async function colAll(col, where = [], opts = {}) {
+  if (!enabled) return [];
+  try {
+    let q = _db.collection(col);
+    for (const [f, op, v] of where) q = q.where(f, op, v);
+    if (opts.limit) q = q.limit(opts.limit);
+    const snap = await q.get();
+    return snap.docs.map(d => d.data());
+  } catch (e) {
+    console.error(`[firebase] colAll ${col} failed:`, e.message);
+    return [];
+  }
+}
+
+module.exports = {
+  firebaseEnabled, storageEnabled, uploadToStorage, saveState, loadState, verifyIdToken,
+  colSet, colUpdate, colGet, colDelete, colAll,
+};

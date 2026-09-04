@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0071c5" />
+<meta name="robots" content="noindex" />
+<title>Partner Portal · Shalom Marine Nets</title>
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/vendor/vendor.css" />
+</head>
+<body class="vendor-body">
+
+<header class="v-nav">
+  <a class="v-brand" href="/">
+    <span class="v-logo">SM</span>
+    <span>Partner Portal</span>
+  </a>
+  <div class="v-navright">
+    <span id="vWho" class="v-who" hidden></span>
+    <button class="btn btn--ghost btn--sm" id="vLogout" hidden>Sign Out</button>
+  </div>
+</header>
+
+<main class="v-main">
+
+  <!-- ============ LANDING / LOGIN / REGISTER ============ -->
+  <section id="viewAuth">
+    <div class="v-hero">
+      <h1>Sell your fishing nets to buyers across India</h1>
+      <p>List your products on our marketplace and receive enquiries directly from
+         commercial buyers. Free to join — no commission on enquiries.</p>
+    </div>
+
+    <div class="v-authgrid">
+      <!-- Sign in -->
+      <div class="v-card">
+        <h2>Already a partner?</h2>
+        <p class="v-muted">Sign in with the mobile number you registered.</p>
+        <label class="v-label">Mobile number</label>
+        <div class="phone-row">
+          <span class="phone-cc">🇮🇳 +91</span>
+          <input id="loginPhone" inputmode="numeric" maxlength="10" placeholder="98765 43210" autocomplete="tel">
+        </div>
+        <p class="v-msg err" id="loginMsg"></p>
+        <button class="btn btn--block" id="loginBtn" style="margin-top:12px">Send OTP</button>
+      </div>
+
+      <!-- Register -->
+      <div class="v-card">
+        <h2>New company?</h2>
+        <p class="v-muted">Register your business. We review every application before
+           your products go live.</p>
+        <button class="btn btn--ghost btn--block" id="showRegister" style="margin-top:12px">Register Your Company</button>
+        <ul class="v-checklist">
+          <li>Free listing, no commission</li>
+          <li>Enquiries sent straight to you</li>
+          <li>You control your prices and stock</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REGISTRATION FORM ============ -->
+  <section id="viewRegister" hidden>
+    <button class="v-back" id="regBack">← Back</button>
+    <div class="v-card v-card--wide">
+      <h2>Register Your Company</h2>
+      <p class="v-muted">All fields marked * are required. We'll review and get back to you.</p>
+
+      <h3 class="v-sec">Company details</h3>
+      <div class="v-grid2">
+        <div class="field"><label>Company Name *</label><input id="rCompany" maxlength="120"></div>
+        <div class="field"><label>GST Number</label><input id="rGst" maxlength="20" placeholder="22AAAAA0000A1Z5"></div>
+      </div>
+      <div class="field"><label>What do you make / sell? *</label>
+        <input id="rCategories" maxlength="200" placeholder="e.g. Purse seine nets, gill nets, ropes"></div>
+      <div class="field"><label>About your company</label>
+        <textarea id="rDesc" maxlength="800" rows="3" placeholder="Years in business, capacity, specialities…"></textarea></div>
+
+      <h3 class="v-sec">Contact</h3>
+      <div class="v-grid2">
+        <div class="field"><label>Contact Person *</label><input id="rContact" maxlength="80"></div>
+        <div class="field"><label>Mobile Number *</label>
+          <div class="phone-row"><span class="phone-cc">🇮🇳 +91</span>
+            <input id="rPhone" inputmode="numeric" maxlength="10" placeholder="98765 43210"></div>
+          <small class="v-hint">This is your login. Use a number that can receive SMS.</small>
+        </div>
+      </div>
+      <div class="v-grid2">
+        <div class="field"><label>Email</label><input id="rEmail" type="email" maxlength="120"></div>
+        <div class="field"><label>Website</label><input id="rWebsite" maxlength="160" placeholder="optional"></div>
+      </div>
+
+      <h3 class="v-sec">Address</h3>
+      <div class="field"><label>Address</label><textarea id="rAddress" maxlength="400" rows="2"></textarea></div>
+      <div class="v-grid3">
+        <div class="field"><label>City</label><input id="rCity" maxlength="60"></div>
+        <div class="field"><label>State</label><input id="rState" maxlength="60"></div>
+        <div class="field"><label>PIN Code</label><input id="rPin" inputmode="numeric" maxlength="10"></div>
+      </div>
+
+      <label class="v-agree">
+        <input type="checkbox" id="rAgree">
+        <span>I confirm the details above are correct, that my company is legally
+        registered, and I accept the <a href="/vendor/terms.html" target="_blank">Partner Terms</a>.</span>
+      </label>
+
+      <p class="v-msg err" id="regMsg"></p>
+      <button class="btn btn--block" id="regSubmit" style="margin-top:14px">Submit Application</button>
+    </div>
+  </section>
+
+  <!-- ============ OTP ============ -->
+  <section id="viewOtp" hidden>
+    <div class="v-card v-card--narrow">
+      <h2>Verify your number</h2>
+      <p class="v-muted">Enter the 6-digit code sent to <strong id="otpPhone"></strong>.</p>
+      <div class="otp-boxes" id="otpBoxes">
+        <input class="otp-box" inputmode="numeric" maxlength="1"><input class="otp-box" inputmode="numeric" maxlength="1">
+        <input class="otp-box" inputmode="numeric" maxlength="1"><input class="otp-box" inputmode="numeric" maxlength="1">
+        <input class="otp-box" inputmode="numeric" maxlength="1"><input class="otp-box" inputmode="numeric" maxlength="1">
+      </div>
+      <p class="v-msg err" id="otpMsg"></p>
+      <button class="btn btn--block" id="otpVerify" style="margin-top:12px">Verify &amp; Sign In</button>
+      <button class="link-btn" id="otpBack" style="margin-top:10px">Use a different number</button>
+    </div>
+  </section>
+
+  <!-- ============ PENDING APPROVAL ============ -->
+  <section id="viewPending" hidden>
+    <div class="v-card v-card--narrow v-center">
+      <div class="v-bigicon">⏳</div>
+      <h2>Application under review</h2>
+      <p class="v-muted">Thank you for registering. Our team is reviewing your details
+        and will contact you shortly. You'll be able to add products once approved.</p>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section id="viewDash" hidden>
+    <div class="v-dashhead">
+      <div>
+        <h1 id="dashCompany">Company</h1>
+        <p class="v-muted" id="dashMeta"></p>
+      </div>
+      <button class="btn btn--sm" id="addProductBtn">+ Add Product</button>
+    </div>
+
+    <div class="v-stats" id="dashStats"></div>
+
+    <div class="v-tabs">
+      <button class="v-tab on" data-tab="products">My Products</button>
+      <button class="v-tab" data-tab="enquiries">Enquiries <span class="v-badge" id="enqBadge" hidden>0</span></button>
+      <button class="v-tab" data-tab="profile">Company Profile</button>
+    </div>
+
+    <div id="tabProducts" class="v-panel"></div>
+    <div id="tabEnquiries" class="v-panel" hidden></div>
+    <div id="tabProfile" class="v-panel" hidden></div>
+  </section>
+
+</main>
+
+<div id="vModal"></div>
+<div id="toast" class="toast"></div>
+<div id="fbRecaptcha"></div>
+
+<script src="/vendor/vendor.js"></script>
+</body>
+</html>

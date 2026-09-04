@@ -189,7 +189,7 @@
     try { SITE = await (await fetch('/api/public/site')).json(); }
     catch { SITE = { products: [], settings: {}, shipping: [], payments: [] }; }
     renderSettings(); renderProducts(); updateCartUI(); initReveal(); checkCustomer(); loadNetParts(); initHeroUI();
-    initProductControls(); initExtras(); injectProductSchema();
+    initProductControls(); initExtras(); injectProductSchema(); loadPartnerProducts();
     setTimeout(() => {
       initStickyBottomCTA();
       initPinchZoom();
@@ -197,6 +197,143 @@
       simplifyCheckoutForMobile();
       lazyLoadImages();
     }, 100);
+  }
+
+  // ---------------- partner marketplace ----------------
+  let PARTNER_PRODUCTS = [];
+  async function loadPartnerProducts() {
+    try {
+      const list = await (await fetch('/api/public/partner-products')).json();
+      PARTNER_PRODUCTS = Array.isArray(list) ? list : [];
+    } catch { PARTNER_PRODUCTS = []; }
+    const sec = $('#partners'), nav = $('#navPartners');
+    if (!PARTNER_PRODUCTS.length) { if (sec) sec.hidden = true; if (nav) nav.hidden = true; return; }
+    if (sec) sec.hidden = false;
+    if (nav) nav.hidden = false;
+
+    // company filter
+    const sel = $('#filterPartner');
+    if (sel) {
+      const names = [...new Set(PARTNER_PRODUCTS.map(p => p.vendor_name).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">All partner companies</option>'
+        + names.map(n => `<option>${esc(n)}</option>`).join('');
+      sel.addEventListener('change', () => renderPartnerProducts(
+        sel.value ? PARTNER_PRODUCTS.filter(p => p.vendor_name === sel.value) : PARTNER_PRODUCTS));
+    }
+    renderPartnerProducts(PARTNER_PRODUCTS);
+  }
+
+  const availLabel = { in_stock: ['stock-in', 'In Stock'], low_stock: ['stock-low', 'Limited'],
+    out_of_stock: ['stock-out', 'Out of Stock'], made_to_order: ['stock-low', 'Made to Order'] };
+
+  function renderPartnerProducts(list) {
+    const wrap = $('#partnerList');
+    if (!wrap) return;
+    if (!list.length) { wrap.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:var(--grey)">No listings from this company yet.</p>'; return; }
+    wrap.innerHTML = list.map(p => {
+      const img = (p.images && p.images[0])
+        ? `<img class="product-image" src="${esc(p.images[0])}" alt="${esc(p.name)}" loading="lazy">`
+        : `<div class="pcard__ph">${netIcon}<span>Product image</span></div>`;
+      const badge = availLabel[p.stock_status] || availLabel.in_stock;
+      const price = p.price > 0
+        ? `<span class="pcard__price">${gmoney(p.price)} <small>/ ${esc(p.unit || 'kg')}</small></span>`
+        : `<span class="pcard__price"><small>Price on Request</small></span>`;
+      const specs = [p.material, p.size && 'Size ' + p.size, p.mesh_size && 'Mesh ' + p.mesh_size,
+        p.color].filter(Boolean).map(esc).join(' · ');
+      return `<article class="pcard reveal">
+       <div class="pcard__inner">
+        <div class="pcard__media">${img}<span class="sold-by">${esc(p.vendor_name)}</span></div>
+        <div class="pcard__body">
+          <div class="pcard__head">
+            <span class="pcard__cat">${esc(p.category || 'Marine Equipment')}</span>
+            <span class="pcard__hdiv"></span>
+            <h3 class="pcard__name">${esc(p.name)}</h3>
+          </div>
+          <p class="pcard__desc">${esc(p.description || '')}</p>
+          <div class="pcard__rule"></div>
+          <div class="pcard__meta">${price}<span class="stock-badge ${badge[0]}">${badge[1]}</span></div>
+          ${specs ? `<p class="partner-specs">${specs}</p>` : ''}
+          <p class="partner-moq">${esc(p.sku)}${p.moq > 1 ? ' · Min order ' + p.moq + ' ' + esc(p.unit || 'kg') : ''}</p>
+          <div class="pcard__actions">
+            <button class="btn btn--sm" data-enq="${esc(p.id)}">Request Quote</button>
+          </div>
+        </div>
+       </div>
+      </article>`;
+    }).join('');
+    wrap.querySelectorAll('[data-enq]').forEach(b => b.addEventListener('click', () =>
+      openEnquiry(list.find(x => x.id === b.dataset.enq))));
+    initReveal();
+    window.applyI18n && window.applyI18n(wrap);
+  }
+
+  function openEnquiry(p) {
+    if (!p) return;
+    const pre = CUSTOMER || {};
+    modal(`
+      <div class="pm__head"><h3 class="pm__title">Request a Quote</h3><button class="pm__close" aria-label="Close">&times;</button></div>
+      <div class="pm__body">
+        <div class="enq-prod">
+          ${p.images && p.images[0] ? `<img src="${esc(p.images[0])}" alt="">` : ''}
+          <div>
+            <strong>${esc(p.name)}</strong>
+            <div class="spec">${esc(p.sku)} · Sold by <strong>${esc(p.vendor_name)}</strong></div>
+            <div class="spec">${p.price > 0 ? gmoney(p.price) + ' / ' + esc(p.unit || 'kg') : 'Price on request'}</div>
+          </div>
+        </div>
+        <p class="enq-note">Your details go directly to <strong>${esc(p.vendor_name)}</strong>, who will contact you with a quote.</p>
+        <div class="frow2">
+          <div class="field"><label>Your Name *</label><input id="eName" value="${esc(pre.name || '')}"></div>
+          <div class="field"><label>Company</label><input id="eCompany" value="${esc(pre.company || '')}"></div>
+        </div>
+        <div class="frow2">
+          <div class="field"><label>Phone *</label><input id="ePhone" type="tel" value="${esc(pre.phone || '')}"></div>
+          <div class="field"><label>Email</label><input id="eEmail" type="email" value="${esc(pre.email || '')}"></div>
+        </div>
+        <div class="frow2">
+          <div class="field"><label>Quantity</label><input id="eQty" inputmode="decimal" value="${p.moq > 1 ? p.moq : 1}"></div>
+          <div class="field"><label>Unit</label><input id="eUnit" value="${esc(p.unit || 'kg')}"></div>
+        </div>
+        <div class="field"><label>Message</label><textarea id="eMsg" rows="3" placeholder="Sizes, specifications, delivery location, timeline…"></textarea></div>
+        <p class="form__msg err" id="enqMsg"></p>
+      </div>
+      <div class="pm__foot pm__foot--split">
+        <button class="btn btn--ghost" id="enqCancel">Cancel</button>
+        <button class="btn" id="enqSend">Send Enquiry</button>
+      </div>`, (box) => {
+      $('#enqCancel', box).addEventListener('click', closeModal);
+      $('#enqSend', box).addEventListener('click', async () => {
+        const msg = $('#enqMsg', box);
+        const v = (id) => $('#' + id, box).value.trim();
+        if (!v('eName')) { msg.textContent = 'Please enter your name.'; return; }
+        if (!v('ePhone') && !v('eEmail')) { msg.textContent = 'Please give a phone number or email.'; return; }
+        const btn = $('#enqSend', box); btn.disabled = true; btn.textContent = 'Sending…';
+        try {
+          const r = await (await fetch('/api/public/enquiry', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product_id: p.id, name: v('eName'), company: v('eCompany'),
+              phone: v('ePhone'), email: v('eEmail'), quantity: Number(v('eQty')) || 1,
+              unit: v('eUnit'), message: v('eMsg') }),
+          })).json();
+          if (r.error) throw new Error(r.error);
+          enquirySent(p.vendor_name);
+        } catch (e) { msg.textContent = e.message; btn.disabled = false; btn.textContent = 'Send Enquiry'; }
+      });
+    }, 'modal__box--order');
+  }
+
+  function enquirySent(vendorName) {
+    modal(`
+      <div class="modal__head"><h3>Enquiry Sent</h3><button class="modal__close">&times;</button></div>
+      <div class="modal__body"><div class="success-box">
+        <div class="check">✓</div>
+        <h3 style="color:var(--navy)">Your enquiry is on its way.</h3>
+        <p style="color:var(--grey);max-width:40ch;margin:.6rem auto 0">
+          <strong>${esc(vendorName)}</strong> has received your details and will contact you
+          directly with a quote. We've kept a copy too.</p>
+      </div></div>
+      <div class="modal__foot" style="justify-content:flex-end"><button class="btn modal__close-btn3">Done</button></div>`,
+      (box) => box.querySelector('.modal__close-btn3').addEventListener('click', closeModal));
   }
 
   // ---------------- filter + sort ----------------

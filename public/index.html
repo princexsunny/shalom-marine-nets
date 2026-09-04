@@ -19,7 +19,7 @@
 <!-- <link rel="canonical" href="https://yourdomain.com/" /> -->
 <meta name="theme-color" content="#0a2540" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<link rel="stylesheet" href="/css/style.css?v=20260716I" />
+<link rel="stylesheet" href="/css/style.css?v=20260904A" />
 <script type="application/ld+json" id="ld-json">
 {"@context":"https://schema.org","@type":"Organization","name":"Shalom Marine Nets","description":"Manufacturer & exporter of purse seine fishing nets, gill nets, fishing ropes, floats, sinkers and marine equipment.","logo":"/img/logo.svg","areaServed":"Worldwide"}
 </script>
@@ -44,6 +44,7 @@
   </a>
   <div class="nav__links" id="navLinks">
     <a href="#products" data-i18n="Products">Products</a>
+    <a href="#partners" id="navPartners" data-i18n="Partners" hidden>Partners</a>
     <a href="#netparts" data-i18n="Net Parts">Net Parts</a>
     <a href="#faq" data-i18n="FAQ">FAQ</a>
     <a href="#contact" data-i18n="Contact">Contact</a>
@@ -153,6 +154,26 @@
   <div class="products" id="productList"></div>
 </section>
 
+<!-- PARTNER MARKETPLACE -->
+<section class="section" id="partners" hidden>
+  <div class="section__head reveal">
+    <p class="section__eyebrow" data-i18n="Marketplace">Marketplace</p>
+    <h2 data-i18n="From Our Partner Manufacturers">From Our Partner Manufacturers</h2>
+    <p class="section__sub" data-i18n="partnersSub">Verified fishing net manufacturers listing on our platform.
+      Request a quote and the company will contact you directly.</p>
+  </div>
+  <div class="products-toolbar">
+    <select id="filterPartner" aria-label="Filter by company"><option value="">All partner companies</option></select>
+  </div>
+  <div class="products" id="partnerList"></div>
+  <div class="partner-cta reveal">
+    <h3 data-i18n="Are you a manufacturer?">Are you a manufacturer?</h3>
+    <p data-i18n="partnerCtaSub">List your fishing nets on our marketplace free of charge and receive
+      enquiries from commercial buyers across India.</p>
+    <a class="btn" href="/vendor" data-i18n="Register Your Company">Register Your Company</a>
+  </div>
+</section>
+
 <!-- EXPLORE NET PARTS (below products) -->
 <section class="section netparts" id="netparts" hidden>
   <div class="np2">
@@ -229,7 +250,13 @@
       <p style="max-width:26ch;margin-top:.6rem;">Premium purse seine fishing nets & marine equipment for commercial fisheries worldwide.</p>
       <div class="footer__social" id="footerSocial"></div>
     </div>
-    <div class="footer__col"><h5 data-i18n="Explore">Explore</h5><a href="#products" data-i18n="Products">Products</a><a href="#netparts" data-i18n="Net Parts">Net Parts</a><a href="#faq" data-i18n="FAQ">FAQ</a><a href="#" id="trackLink" data-i18n="Track Order">Track Order</a><a href="/admin">Admin</a></div>
+    <div class="footer__col"><h5 data-i18n="Explore">Explore</h5><a href="#products" data-i18n="Products">Products</a><a href="#netparts" data-i18n="Net Parts">Net Parts</a><a href="#partners" data-i18n="Our Partners">Our Partners</a><a href="#faq" data-i18n="FAQ">FAQ</a><a href="#" id="trackLink" data-i18n="Track Order">Track Order</a><a href="/admin">Admin</a></div>
+    <div class="footer__col"><h5 data-i18n="For Manufacturers">For Manufacturers</h5>
+      <a href="/vendor" data-i18n="Sell With Us">Sell With Us</a>
+      <a href="/vendor" data-i18n="Partner Sign In">Partner Sign In</a>
+      <a href="/vendor/terms.html" data-i18n="Partner Terms">Partner Terms</a>
+      <p style="font-size:.82rem;opacity:.75;margin-top:.4rem">Fishing net manufacturers — list your products free and receive buyer enquiries.</p>
+    </div>
     <div class="footer__col"><h5 data-i18n="Contact">Contact</h5><a id="footEmail" href="#">email</a><a id="footPhone" href="#">phone</a><p id="footAddress">address</p></div>
     <div class="footer__col"><h5 data-i18n="Legal">Legal</h5><a href="/privacy.html" data-i18n="Privacy Policy">Privacy Policy</a><a href="/terms.html" data-i18n="Terms & Conditions">Terms &amp; Conditions</a></div>
   </div>
@@ -260,7 +287,7 @@
 <div id="modalMount"></div>
 <div class="toast" id="toast"></div>
 
-<script src="/js/i18n.js?v=20260716I"></script>
-<script src="/js/main.js?v=20260716I"></script>
+<script src="/js/i18n.js?v=20260904A"></script>
+<script src="/js/main.js?v=20260904A"></script>
 </body>
 </html>

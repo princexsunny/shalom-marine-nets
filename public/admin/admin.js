@@ -74,7 +74,10 @@
 
   async function api(path, opts = {}) {
     const res = await fetch(path, { headers: opts.body && !(opts.body instanceof FormData) ? { 'Content-Type': 'application/json' } : undefined, ...opts });
-    if (res.status === 401) { showLogin(); throw new Error('Session expired'); }
+    // A 401 from the login endpoint itself means "wrong password", not "your session
+    // expired" — let it fall through so the real server message (e.g. "Incorrect
+    // password") reaches the user instead of being replaced.
+    if (res.status === 401 && path !== '/api/auth/login') { showLogin(); throw new Error('Session expired'); }
     let data = {}; try { data = await res.json(); } catch {}
     if (!res.ok) throw new Error(data.error || 'Request failed');
     return data;
@@ -104,7 +107,8 @@
   const VIEWS = { dashboard: viewDashboard, orders: viewOrders, products: viewProducts, inventory: viewInventory,
     customers: viewCustomers, suppliers: viewSuppliers, coupons: viewCoupons, shipping: viewShipping, payments: viewPayments,
     netparts: viewNetParts, categories: viewCategories, hero: viewHero, contact: viewContact, seo: viewSeo,
-    staff: viewStaff, audit: viewAudit, account: viewAccount };
+    staff: viewStaff, audit: viewAudit, account: viewAccount,
+    partners: viewPartners, partnerproducts: viewPartnerProducts, enquiries: viewEnquiries };
   function route(view) { $$('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.view === view)); (VIEWS[view] || viewDashboard)(); }
   const head = (t, sub, action = '') => `<div class="page-head"><div><h2>${t}</h2>${sub ? `<p>${sub}</p>` : ''}</div><div>${action}</div></div>`;
   const stBadge = (s) => `<span class="st st-${esc(s)}">${esc(String(s).replace('_',' '))}</span>`;
@@ -1250,6 +1254,218 @@
         } catch (e) { $('#mMsg', box).className = 'msg err'; $('#mMsg', box).textContent = e.message; btn.disabled = false; btn.textContent = 'Send email'; }
       });
     });
+  }
+
+  // ===================== MARKETPLACE: PARTNERS =====================
+  const vstBadge = (s) => {
+    const map = { approved: ['st-paid', 'Approved'], pending: ['st-pending', 'Pending'],
+      suspended: ['st-cancelled', 'Suspended'], rejected: ['st-cancelled', 'Rejected'] };
+    const [cls, label] = map[s] || ['st-pending', s];
+    return `<span class="st ${cls}">${esc(label)}</span>`;
+  };
+
+  async function viewPartners() {
+    main.innerHTML = head('Partner Companies', 'Outside companies selling through your marketplace.');
+    const [stats, list] = await Promise.all([api('/api/mkt/stats'), api('/api/mkt/vendors')]);
+    const pending = list.filter(v => v.status === 'pending');
+
+    main.innerHTML += `
+      <div class="cards" style="margin-bottom:1rem">
+        <div class="card"><span>Total partners</span><b>${stats.vendors_total}</b></div>
+        <div class="card"><span>Awaiting approval</span><b>${stats.vendors_pending}</b></div>
+        <div class="card"><span>Live listings</span><b>${stats.products_approved}</b></div>
+        <div class="card"><span>New enquiries</span><b>${stats.enquiries_new}</b></div>
+      </div>`;
+
+    if (pending.length) {
+      main.innerHTML += `<h3 style="margin:1rem 0 .6rem;color:var(--navy)">Awaiting your approval (${pending.length})</h3>
+        <div class="tablewrap"><table><thead><tr>
+          <th>Company</th><th>Contact</th><th>Sells</th><th>Applied</th><th>Action</th>
+        </tr></thead><tbody>
+        ${pending.map(v => `<tr>
+          <td><strong>${esc(v.company_name)}</strong><br><small>${esc([v.city, v.state].filter(Boolean).join(', '))}${v.gst ? ' · GST ' + esc(v.gst) : ''}</small></td>
+          <td>${esc(v.contact_name)}<br><small>${esc(v.phone)}${v.email ? '<br>' + esc(v.email) : ''}</small></td>
+          <td><small>${esc(v.categories || '—')}</small></td>
+          <td><small>${(v.created_at || '').slice(0, 10)}</small></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn--sm" data-ap="${esc(v.id)}">Approve</button>
+            <button class="btn btn--ghost btn--sm" data-rj="${esc(v.id)}">Reject</button>
+            <button class="btn btn--ghost btn--sm" data-vw="${esc(v.id)}">View</button>
+          </td></tr>`).join('')}
+        </tbody></table></div>`;
+    }
+
+    main.innerHTML += `<h3 style="margin:1.4rem 0 .6rem;color:var(--navy)">All partners</h3>
+      <div class="tablewrap"><table><thead><tr>
+        <th>Company</th><th>Contact</th><th>Listings</th><th>Status</th><th>Action</th>
+      </tr></thead><tbody>
+      ${list.length ? list.map(v => `<tr>
+        <td><strong>${esc(v.company_name)}</strong><br><small>${esc(v.sku_prefix || '')} · ${esc([v.city, v.state].filter(Boolean).join(', '))}</small></td>
+        <td><small>${esc(v.contact_name)}<br>${esc(v.phone)}</small></td>
+        <td><span class="pcount" data-count="${esc(v.id)}">–</span></td>
+        <td>${vstBadge(v.status)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn--ghost btn--sm" data-vw="${esc(v.id)}">View</button>
+          ${v.status === 'approved'
+            ? `<button class="btn btn--ghost btn--sm" data-sp="${esc(v.id)}">Suspend</button>`
+            : `<button class="btn btn--sm" data-ap="${esc(v.id)}">Approve</button>`}
+        </td></tr>`).join('')
+      : '<tr><td colspan="5" style="text-align:center;color:var(--grey);padding:1.4rem">No partner companies yet. Share the link <strong>/vendor</strong> to invite them.</td></tr>'}
+      </tbody></table></div>`;
+
+    // fill listing counts
+    api('/api/mkt/products').then(prods => {
+      $$('.pcount').forEach(el => {
+        const n = prods.filter(p => p.vendor_id === el.dataset.count);
+        el.textContent = `${n.filter(p => p.status === 'approved').length} live / ${n.length}`;
+      });
+    }).catch(() => {});
+
+    const setStatus = async (id, status, okMsg) => {
+      try { await api(`/api/mkt/vendors/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
+        toast(okMsg); viewPartners(); } catch (e) { toast(e.message); }
+    };
+    $$('[data-ap]').forEach(b => b.addEventListener('click', () => setStatus(b.dataset.ap, 'approved', 'Partner approved')));
+    $$('[data-rj]').forEach(b => b.addEventListener('click', () => {
+      if (confirm('Reject this application?')) setStatus(b.dataset.rj, 'rejected', 'Application rejected');
+    }));
+    $$('[data-sp]').forEach(b => b.addEventListener('click', () => {
+      if (confirm('Suspend this partner? Their listings will be hidden immediately.'))
+        setStatus(b.dataset.sp, 'suspended', 'Partner suspended');
+    }));
+    $$('[data-vw]').forEach(b => b.addEventListener('click', () => partnerDetail(b.dataset.vw)));
+  }
+
+  async function partnerDetail(id) {
+    const d = await api('/api/mkt/vendors/' + id);
+    const v = d.vendor;
+    modal(`<h3>${esc(v.company_name)} ${vstBadge(v.status)}</h3>
+      <div class="sl-cards" style="margin-bottom:.8rem">
+        <div class="sl-card sl-card--new"><span class="sl-card__l">Listings</span>
+          <b class="sl-card__v">${d.stats.products_live} live</b>
+          <span class="sl-card__s">${d.stats.products_pending} awaiting review · ${d.stats.products} total</span></div>
+        <div class="sl-card sl-card--old"><span class="sl-card__l">Enquiries</span>
+          <b class="sl-card__v">${d.stats.enquiries}</b>
+          <span class="sl-card__s">${d.stats.enquiries_new} new</span></div>
+      </div>
+      <div class="field"><label>Contact</label>
+        <div style="font-size:.9rem;color:var(--navy);line-height:1.7">
+          ${esc(v.contact_name)}<br>
+          📞 <a href="tel:${esc(v.phone)}">${esc(v.phone)}</a>
+          ${v.email ? `<br>✉ <a href="mailto:${esc(v.email)}">${esc(v.email)}</a>` : ''}
+          ${v.gst ? `<br>GST: <strong>${esc(v.gst)}</strong>` : ''}
+          ${v.website ? `<br>🌐 ${esc(v.website)}` : ''}
+          <br>${esc([v.address, v.city, v.state, v.pincode].filter(Boolean).join(', '))}
+        </div></div>
+      <div class="field"><label>Sells</label><div style="font-size:.9rem">${esc(v.categories || '—')}</div></div>
+      ${v.description ? `<div class="field"><label>About</label><div style="font-size:.9rem;color:var(--grey)">${esc(v.description)}</div></div>` : ''}
+      <div class="field"><label>Internal notes (not shown to the partner)</label>
+        <textarea id="vNotes" rows="2">${esc(v.admin_notes || '')}</textarea></div>
+      <h4 style="margin:1rem 0 .5rem;color:var(--navy)">Their listings</h4>
+      <div class="tablewrap"><table><thead><tr><th>SKU</th><th>Product</th><th>Price</th><th>Status</th><th></th></tr></thead><tbody>
+        ${d.products.length ? d.products.map(p => `<tr>
+          <td><small>${esc(p.sku)}</small></td>
+          <td>${esc(p.name)}</td>
+          <td>${p.price > 0 ? money(p.price) + '<small>/' + esc(p.unit) + '</small>' : '<small>On request</small>'}</td>
+          <td>${vstBadge(p.status)}</td>
+          <td style="white-space:nowrap">${p.status !== 'approved'
+            ? `<button class="btn btn--sm" data-pap="${esc(p.id)}">Approve</button>`
+            : `<button class="btn btn--ghost btn--sm" data-prj="${esc(p.id)}">Hide</button>`}</td>
+        </tr>`).join('') : '<tr><td colspan="5" style="color:var(--grey);text-align:center;padding:1rem">No listings yet.</td></tr>'}
+      </tbody></table></div>
+      <div class="modal-actions" style="margin-top:1rem">
+        <button class="btn btn--ghost" id="vSaveNotes">Save Notes</button>
+        ${v.status === 'approved'
+          ? `<button class="btn btn--ghost" id="vSuspend">Suspend Partner</button>`
+          : `<button class="btn" id="vApprove">Approve Partner</button>`}
+        <button class="btn btn--danger" id="vDelete">Delete</button>
+      </div>`, (box) => {
+      const reload = () => { closeModal(); viewPartners(); };
+      $('#vSaveNotes', box).addEventListener('click', async () => {
+        try { await api('/api/mkt/vendors/' + v.id, { method: 'PUT', body: JSON.stringify({ admin_notes: $('#vNotes', box).value }) });
+          toast('Notes saved'); } catch (e) { toast(e.message); }
+      });
+      $('#vApprove', box)?.addEventListener('click', async () => {
+        await api(`/api/mkt/vendors/${v.id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'approved' }) });
+        toast('Partner approved'); reload();
+      });
+      $('#vSuspend', box)?.addEventListener('click', async () => {
+        if (!confirm('Suspend this partner? Their listings will be hidden.')) return;
+        await api(`/api/mkt/vendors/${v.id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'suspended' }) });
+        toast('Partner suspended'); reload();
+      });
+      $('#vDelete', box).addEventListener('click', async () => {
+        if (!confirm(`Delete ${v.company_name} and all their listings? This cannot be undone.`)) return;
+        await api('/api/mkt/vendors/' + v.id, { method: 'DELETE' });
+        toast('Partner deleted'); reload();
+      });
+      box.querySelectorAll('[data-pap]').forEach(b => b.addEventListener('click', async () => {
+        await api(`/api/mkt/products/${b.dataset.pap}/status`, { method: 'PUT', body: JSON.stringify({ status: 'approved' }) });
+        toast('Listing approved'); closeModal(); partnerDetail(v.id);
+      }));
+      box.querySelectorAll('[data-prj]').forEach(b => b.addEventListener('click', async () => {
+        await api(`/api/mkt/products/${b.dataset.prj}/status`, { method: 'PUT', body: JSON.stringify({ status: 'rejected' }) });
+        toast('Listing hidden'); closeModal(); partnerDetail(v.id);
+      }));
+    });
+  }
+
+  // ===================== MARKETPLACE: LISTINGS REVIEW =====================
+  async function viewPartnerProducts() {
+    main.innerHTML = head('Partner Listings', 'Review products submitted by partner companies.');
+    const list = await api('/api/mkt/products');
+    const pending = list.filter(p => p.status === 'pending');
+    const render = (rows, title, emptyMsg) => `
+      <h3 style="margin:1.2rem 0 .6rem;color:var(--navy)">${title} (${rows.length})</h3>
+      <div class="tablewrap"><table><thead><tr>
+        <th>Product</th><th>Partner</th><th>SKU</th><th>Price</th><th>Status</th><th>Action</th>
+      </tr></thead><tbody>
+      ${rows.length ? rows.map(p => `<tr>
+        <td style="display:flex;align-items:center;gap:.6rem">
+          ${p.images && p.images[0] ? `<img src="${esc(p.images[0])}" style="width:38px;height:38px;border-radius:6px;object-fit:cover">` : ''}
+          <div><strong>${esc(p.name)}</strong><br><small>${esc(p.category || '')}</small></div></td>
+        <td><small>${esc(p.vendor_name)}</small></td>
+        <td><small>${esc(p.sku)}</small></td>
+        <td>${p.price > 0 ? money(p.price) + '<small>/' + esc(p.unit) + '</small>' : '<small>On request</small>'}</td>
+        <td>${vstBadge(p.status)}</td>
+        <td style="white-space:nowrap">
+          ${p.status !== 'approved' ? `<button class="btn btn--sm" data-ok="${esc(p.id)}">Approve</button>` : ''}
+          ${p.status !== 'rejected' ? `<button class="btn btn--ghost btn--sm" data-no="${esc(p.id)}">Hide</button>` : ''}
+        </td></tr>`).join('')
+      : `<tr><td colspan="6" style="text-align:center;color:var(--grey);padding:1.2rem">${emptyMsg}</td></tr>`}
+      </tbody></table></div>`;
+
+    main.innerHTML += render(pending, 'Awaiting review', 'Nothing waiting for review.')
+      + render(list.filter(p => p.status !== 'pending'), 'Reviewed', 'No reviewed listings yet.');
+
+    $$('[data-ok]').forEach(b => b.addEventListener('click', async () => {
+      await api(`/api/mkt/products/${b.dataset.ok}/status`, { method: 'PUT', body: JSON.stringify({ status: 'approved' }) });
+      toast('Listing approved'); viewPartnerProducts();
+    }));
+    $$('[data-no]').forEach(b => b.addEventListener('click', async () => {
+      await api(`/api/mkt/products/${b.dataset.no}/status`, { method: 'PUT', body: JSON.stringify({ status: 'rejected' }) });
+      toast('Listing hidden'); viewPartnerProducts();
+    }));
+  }
+
+  // ===================== MARKETPLACE: ENQUIRIES =====================
+  async function viewEnquiries() {
+    main.innerHTML = head('Marketplace Enquiries', 'Buyer enquiries sent to partner companies.');
+    const list = await api('/api/mkt/enquiries');
+    main.innerHTML += `<div class="tablewrap"><table><thead><tr>
+      <th>Buyer</th><th>Product</th><th>Partner</th><th>Qty</th><th>When</th><th>Status</th>
+    </tr></thead><tbody>
+    ${list.length ? list.map(e => `<tr>
+      <td><strong>${esc(e.name)}</strong>${e.company ? '<br><small>' + esc(e.company) + '</small>' : ''}
+        <br><small>${esc(e.phone)}${e.email ? ' · ' + esc(e.email) : ''}</small></td>
+      <td>${esc(e.product_name || '—')}${e.product_sku ? '<br><small>' + esc(e.product_sku) + '</small>' : ''}</td>
+      <td><small>${esc(e.vendor_name || '—')}</small></td>
+      <td>${e.quantity} ${esc(e.unit)}</td>
+      <td><small>${(e.created_at || '').replace('T', ' ').slice(0, 16)}</small></td>
+      <td>${vstBadge(e.status === 'new' ? 'pending' : 'approved')} <small>${esc(e.status)}</small></td>
+    </tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:var(--grey);padding:1.4rem">No enquiries yet.</td></tr>'}
+    </tbody></table></div>`;
   }
 
   // ===================== CUSTOMERS =====================

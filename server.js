@@ -13,6 +13,7 @@ const { sendSms, smsEnabled } = require('./sms');
 const { sendEmail } = require('./email');
 const firebase = require('./firebase');
 const razorpay = require('./razorpay');
+const { marketplace } = require('./vendors');
 
 // Public (non-secret) Firebase web config for client-side Phone Auth. These are
 // safe to expose — they identify the project, they are not credentials.
@@ -493,6 +494,137 @@ app.post('/api/public/pay/verify', rateLimit(20, 10 * 60 * 1000), (req, res) => 
 });
 
 // =====================================================================
+//  MARKETPLACE — vendor companies, their listings, buyer enquiries
+// =====================================================================
+const requireVendor = (req, res, next) =>
+  (req.session && req.session.vendorId) ? next() : res.status(401).json({ error: 'Please sign in' });
+
+/* Vendor sign-in reuses Firebase Phone Auth: the browser verifies the mobile
+   number, we verify the token here and match it to a registered company. */
+app.post('/api/vendor/login', async (req, res) => {
+  const { idToken } = req.body || {};
+  const decoded = await firebase.verifyIdToken(idToken);
+  if (!decoded || !decoded.phone_number)
+    return res.status(401).json({ error: 'Could not verify your mobile number.' });
+  const v = await marketplace.getVendorByPhone(decoded.phone_number);
+  if (!v) return res.status(404).json({ error: 'This number is not registered. Please register first.', unregistered: true });
+  if (v.status === 'rejected') return res.status(403).json({ error: 'This application was not approved. Please contact us.' });
+  if (v.status === 'suspended') return res.status(403).json({ error: 'This account is suspended. Please contact us.' });
+  req.session.vendorId = v.id;
+  res.json({ ok: true, vendor: v });
+});
+app.post('/api/vendor/logout', (req, res) => { if (req.session) req.session.vendorId = null; res.json({ ok: true }); });
+app.get('/api/vendor/me', async (req, res) => {
+  if (!req.session || !req.session.vendorId) return res.json({ authenticated: false });
+  const v = await marketplace.getVendor(req.session.vendorId);
+  if (!v || v.status === 'suspended' || v.status === 'rejected') {
+    if (req.session) req.session.vendorId = null;
+    return res.json({ authenticated: false });
+  }
+  res.json({ authenticated: true, vendor: v, stats: await marketplace.vendorStats(v.id) });
+});
+
+// Public registration (rate-limited — this endpoint is open to the world)
+app.post('/api/vendor/register', rateLimit(5, 60 * 60 * 1000), async (req, res) => {
+  const r = await marketplace.registerVendor(req.body || {});
+  if (r.error) return res.status(400).json({ error: r.error });
+  const s = store.getSettings();
+  if (s.contact_email) sendEmail(s.contact_email, `New partner application — ${r.vendor.company_name}`,
+    `${r.vendor.company_name} (${r.vendor.contact_name}, ${r.vendor.phone}) applied to sell on your site.\nReview it in Admin → Partners.`).catch(()=>{});
+  store.notify('vendor_signup', `New partner application: ${r.vendor.company_name}`);
+  res.json({ ok: true, id: r.vendor.id });
+});
+
+// ---- vendor's own workspace (isolated: everything is scoped to their id) ----
+app.get('/api/vendor/products', requireVendor, async (req, res) =>
+  res.json(await marketplace.vendorProducts(req.session.vendorId)));
+app.post('/api/vendor/products', requireVendor, async (req, res) => {
+  const r = await marketplace.addProduct(req.session.vendorId, req.body || {});
+  if (r.error) return res.status(400).json({ error: r.error });
+  store.notify('vendor_product', `New partner listing awaiting review: ${r.product.name}`);
+  res.json({ ok: true, product: r.product });
+});
+app.put('/api/vendor/products/:id', requireVendor, async (req, res) => {
+  const r = await marketplace.updateProduct(req.params.id, req.body || {}, req.session.vendorId);
+  if (r.error) return res.status(r.error === 'Not your product' ? 403 : 400).json({ error: r.error });
+  res.json({ ok: true, product: r.product });
+});
+app.delete('/api/vendor/products/:id', requireVendor, async (req, res) => {
+  const r = await marketplace.deleteProduct(req.params.id, req.session.vendorId);
+  if (r.error) return res.status(r.error === 'Not your product' ? 403 : 400).json({ error: r.error });
+  res.json({ ok: true });
+});
+app.get('/api/vendor/enquiries', requireVendor, async (req, res) =>
+  res.json(await marketplace.vendorEnquiries(req.session.vendorId)));
+app.put('/api/vendor/enquiries/:id', requireVendor, async (req, res) => {
+  const r = await marketplace.setEnquiryStatus(req.params.id, (req.body || {}).status, req.session.vendorId);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+app.put('/api/vendor/profile', requireVendor, async (req, res) => {
+  const r = await marketplace.updateVendor(req.session.vendorId, req.body || {});
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true, vendor: r.vendor });
+});
+// vendors upload their own product photos (same Firebase Storage pipeline)
+app.post('/api/vendor/upload', requireVendor, upload.array('images', 8), async (req, res) => {
+  const files = await filesToUrls(req.files);
+  res.json({ ok: true, urls: files.map(f => f.url) });
+});
+
+// ---- public marketplace ----
+app.get('/api/public/partners', async (req, res) => res.json(await marketplace.publicVendors()));
+app.get('/api/public/partner-products', async (req, res) => res.json(await marketplace.publicProducts()));
+app.post('/api/public/enquiry', rateLimit(10, 10 * 60 * 1000), async (req, res) => {
+  const r = await marketplace.addEnquiry(req.body || {});
+  if (r.error) return res.status(400).json({ error: r.error });
+  const e = r.enquiry;
+  // notify the vendor and copy the office
+  const vendor = e.vendor_id ? await marketplace.getVendor(e.vendor_id) : null;
+  const body = `New enquiry for ${e.product_name || 'your products'}${e.product_sku ? ' (' + e.product_sku + ')' : ''}\n\n`
+    + `From: ${e.name}${e.company ? ' — ' + e.company : ''}\nPhone: ${e.phone}\nEmail: ${e.email || '-'}\n`
+    + `Quantity: ${e.quantity} ${e.unit}\n\n${e.message || ''}`;
+  if (vendor && vendor.email) sendEmail(vendor.email, `New enquiry — ${e.product_name || 'your listing'}`, body).catch(()=>{});
+  const s = store.getSettings();
+  if (s.contact_email) sendEmail(s.contact_email, `Marketplace enquiry — ${e.vendor_name || 'partner'}`, body).catch(()=>{});
+  store.notify('enquiry', `New enquiry for ${e.product_name || 'a partner listing'}`);
+  res.json({ ok: true });
+});
+
+// ---- admin oversight ----
+app.get('/api/mkt/stats', requireAuth, async (req, res) => res.json(await marketplace.stats()));
+app.get('/api/mkt/vendors', requireAuth, async (req, res) => res.json(await marketplace.allVendors(req.query.status)));
+app.get('/api/mkt/vendors/:id', requireAuth, async (req, res) => {
+  const v = await marketplace.getVendor(req.params.id);
+  if (!v) return res.status(404).json({ error: 'Not found' });
+  res.json({ vendor: v, products: await marketplace.vendorProducts(v.id), stats: await marketplace.vendorStats(v.id) });
+});
+app.put('/api/mkt/vendors/:id/status', requireAdmin, async (req, res) => {
+  const r = await marketplace.setVendorStatus(req.params.id, (req.body || {}).status, req.session.username);
+  if (r.error) return res.status(400).json({ error: r.error });
+  const v = r.vendor;
+  if (v.email && v.status === 'approved') sendEmail(v.email, 'Your partner account is approved',
+    `Hello ${v.contact_name},\n\n${v.company_name} has been approved. Sign in at /vendor with your mobile number to add your products.\n\n— ${store.getSettings().company_name || 'Marine Nets'}`).catch(()=>{});
+  res.json({ ok: true, vendor: v });
+});
+app.put('/api/mkt/vendors/:id', requireAdmin, async (req, res) => {
+  const r = await marketplace.updateVendor(req.params.id, req.body || {}, { adminFields: true });
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+app.delete('/api/mkt/vendors/:id', requireAdmin, async (req, res) =>
+  res.json(await marketplace.deleteVendor(req.params.id)));
+app.get('/api/mkt/products', requireAuth, async (req, res) => res.json(await marketplace.allProducts(req.query.status)));
+app.put('/api/mkt/products/:id/status', requireAuth, async (req, res) => {
+  const r = await marketplace.setProductStatus(req.params.id, (req.body || {}).status);
+  if (r.error) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+app.delete('/api/mkt/products/:id', requireAdmin, async (req, res) =>
+  res.json(await marketplace.deleteProduct(req.params.id)));
+app.get('/api/mkt/enquiries', requireAuth, async (req, res) => res.json(await marketplace.allEnquiries()));
+
+// =====================================================================
 //  ADMIN API
 // =====================================================================
 // Products
@@ -804,6 +936,8 @@ app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); },
 }));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin', 'index.html')));
+app.get('/vendor', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor', 'index.html')));
+app.get('/partners', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor', 'index.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 (async () => {
