@@ -279,6 +279,13 @@ const store = {
 
   // users / auth
   findUser: (u) => state.users.find(x => x.username === u),
+  // Password-only login: match the given password against every user, admins first.
+  findUserByPassword: (password) => {
+    const pw = String(password || '');
+    if (!pw) return null;
+    const users = [...state.users].sort((a, b) => (a.role === 'admin' ? -1 : 1) - (b.role === 'admin' ? -1 : 1));
+    return users.find(x => x.password_hash && bcrypt.compareSync(pw, x.password_hash)) || null;
+  },
   getUser: (id) => state.users.find(x => x.id === id),
   allUsers: () => state.users.map(({ password_hash, ...u }) => u),
   addUser({ username, password, role, name }) {

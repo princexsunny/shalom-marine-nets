@@ -178,12 +178,15 @@ app.post('/api/auth/login', (req, res) => {
   if (rec && rec.until > Date.now())
     return res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil((rec.until - Date.now())/60000)} min.` });
   const { username, password } = req.body || {};
-  const user = store.findUser(username);
-  if (!user || !bcrypt.compareSync(password || '', user.password_hash)) {
+  // Password-only login. If a username is still sent (older cached page), it must
+  // match too; otherwise authenticate by password alone against any admin/staff user.
+  const user = username ? store.findUser(username) : store.findUserByPassword(password);
+  const passOk = user && bcrypt.compareSync(password || '', user.password_hash);
+  if (!user || !passOk) {
     const r = LOGIN_FAILS.get(ip) || { count: 0, until: 0 };
     r.count++; if (r.count >= 5) { r.until = Date.now() + 15 * 60 * 1000; r.count = 0; }
     LOGIN_FAILS.set(ip, r);
-    return res.status(401).json({ error: 'Invalid username or password' });
+    return res.status(401).json({ error: 'Incorrect password' });
   }
   LOGIN_FAILS.delete(ip);
   req.session.userId = user.id; req.session.username = user.username; req.session.role = user.role;
@@ -819,6 +822,28 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
     }
   }
   store.startCloudMirror();   // from here on, saves also go to Firestore
+
+  /* One-time admin password reset. Set ADMIN_RESET_PASSWORD on the host, redeploy,
+     log in with the new password, then DELETE the env var and redeploy again so it
+     can't reset on every restart. Runs after the cloud restore so it also updates
+     the backed-up account. */
+  if (process.env.ADMIN_RESET_PASSWORD) {
+    const np = process.env.ADMIN_RESET_PASSWORD;
+    if (np.length < 6) {
+      console.error('[reset] ADMIN_RESET_PASSWORD is too short (min 6 chars) — skipped.');
+    } else {
+      const admin = store.findUser('admin') || store.allUsers().find(u => u.role === 'admin');
+      const target = admin && admin.id !== undefined ? store.getUser(admin.id) : null;
+      if (target) {
+        store.setPassword(target.id, bcrypt.hashSync(np, 10));
+        console.log(`\n  🔑 Admin password for "${target.username}" was reset via ADMIN_RESET_PASSWORD.`);
+        console.log('     Log in now, then REMOVE that env var and redeploy.\n');
+      } else {
+        console.error('[reset] No admin user found to reset.');
+      }
+    }
+  }
+
   // ---- Pre-launch safety check -------------------------------------------
   // Warns loudly about anything that is fine locally but dangerous in public.
   const warn = [];
